@@ -10,7 +10,7 @@ type ConfigurationEditorModel = {
 
 export function renderConfigurationEditorHtml(webview: import('vscode').Webview, model: ConfigurationEditorModel): string {
   const nonce = createNonce();
-  const stateJson = JSON.stringify(model).replaceAll('<', '\\u003c');
+  const stateJson = JSON.stringify(model).replaceAll('<', String.raw`\u003c`);
 
   return String.raw`<!DOCTYPE html>
 <html lang="en">
