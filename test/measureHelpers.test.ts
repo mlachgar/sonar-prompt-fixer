@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COVERAGE_METRICS,
+  DUPLICATION_METRICS,
+  KPI_METRICS,
   hasCoverageGap,
   hasDuplicationGap,
   mapCoverageTarget,
@@ -8,6 +11,28 @@ import {
 } from '../src/sonar/measureHelpers';
 
 describe('measureHelpers', () => {
+  it('exports the expected metric key groups', () => {
+    expect(COVERAGE_METRICS).toEqual([
+      'coverage',
+      'line_coverage',
+      'branch_coverage',
+      'lines_to_cover',
+      'uncovered_lines',
+      'conditions_to_cover',
+      'uncovered_conditions'
+    ]);
+    expect(DUPLICATION_METRICS).toEqual([
+      'duplicated_lines_density',
+      'duplicated_lines',
+      'duplicated_blocks'
+    ]);
+    expect(KPI_METRICS).toEqual(expect.arrayContaining([
+      'coverage',
+      'duplicated_lines_density',
+      'security_review_rating'
+    ]));
+  });
+
   it('maps coverage targets and falls back to the component name when path is missing', () => {
     expect(mapCoverageTarget({
       key: 'proj:file',
@@ -132,6 +157,28 @@ describe('measureHelpers', () => {
       securityHotspots: 3,
       securityHotspotsReviewed: 66.7,
       securityReviewRating: 'A'
+    });
+  });
+
+  it('treats empty metric strings as undefined', () => {
+    expect(mapCoverageTarget({
+      key: 'proj:empty',
+      name: 'empty.ts',
+      measures: [
+        { metric: 'coverage', value: '' },
+        { metric: 'uncovered_lines', value: '' }
+      ]
+    })).toEqual({
+      key: 'proj:empty',
+      component: 'empty.ts',
+      path: 'empty.ts',
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      linesToCover: undefined,
+      uncoveredLines: undefined,
+      conditionsToCover: undefined,
+      uncoveredConditions: undefined
     });
   });
 });

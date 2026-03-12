@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SonarBackendBase } from '../src/sonar/SonarBackendBase';
 import { createSonarBackend } from '../src/sonar/SonarBackendFactory';
 import { SonarCloudBackend } from '../src/sonar/SonarCloudBackend';
 import { SonarQubeServerBackend } from '../src/sonar/SonarQubeServerBackend';
 import { mapIssue, mapRule } from '../src/sonar/mappers';
 import { HttpError, ConfigurationError } from '../src/util/errors';
-import { SonarConnection } from '../src/sonar/types';
+import { ConnectionTestResult, SonarCapabilities, SonarConnection, SonarProjectInfo } from '../src/sonar/types';
 
 function mockClient(overrides: Record<string, unknown>) {
   return {
@@ -31,6 +32,43 @@ const serverConnection: SonarConnection = {
   pullRequest: '42',
   authMode: 'basicToken'
 };
+
+class TestBackend extends SonarBackendBase {
+  public constructor(connection: SonarConnection, token: string) {
+    super(connection, token);
+  }
+
+  public override async testConnection(): Promise<ConnectionTestResult> {
+    return {
+      ok: true,
+      kind: 'success',
+      message: 'ok'
+    };
+  }
+
+  public override async getProjectInfo(): Promise<SonarProjectInfo> {
+    return {
+      key: this.connection.projectKey,
+      name: 'Project'
+    };
+  }
+
+  public override async getCapabilities(): Promise<SonarCapabilities> {
+    return {
+      supportsBearerAuth: true,
+      supportsBasicTokenAuth: true,
+      isCloud: false
+    };
+  }
+
+  public scopedQuery(): Record<string, string | undefined> {
+    return this.getScopedQuery();
+  }
+
+  public rulesQuery(): Record<string, string | undefined> {
+    return this.getRulesQuery();
+  }
+}
 
 describe('Sonar backend factory and mappers', () => {
   it('validates required connection settings and token presence', () => {
@@ -74,6 +112,158 @@ describe('Sonar backend factory and mappers', () => {
       type: 'BUG',
       htmlDesc: '<p>desc</p>'
     });
+  });
+});
+
+describe('SonarBackendBase', () => {
+  it('provides default scoped and rules queries', () => {
+    const backend = new TestBackend(cloudConnection, 'token');
+
+    expect(backend.scopedQuery()).toEqual({
+      organization: 'org',
+      branch: 'main',
+      pullRequest: '42'
+    });
+    expect(backend.rulesQuery()).toEqual({
+      organization: 'org'
+    });
+  });
+
+  it('fetches shared issue, measure, hotspot, KPI, and rule data through the base implementation', async () => {
+    const backend = new TestBackend(cloudConnection, 'token');
+    const client = mockClient({
+      getJson: vi.fn()
+        .mockResolvedValueOnce({
+          issues: [{
+            key: '1',
+            rule: 'typescript:S1',
+            message: 'Issue',
+            severity: 'MAJOR',
+            type: 'CODE_SMELL',
+            component: 'proj:src/file.ts'
+          }]
+        })
+        .mockResolvedValueOnce({
+          components: [{
+            key: 'proj:src/file.ts',
+            path: 'src/file.ts',
+            name: 'file.ts',
+            measures: [
+              { metric: 'coverage', value: '55.5' },
+              { metric: 'uncovered_lines', value: '4' }
+            ]
+          }]
+        })
+        .mockResolvedValueOnce({
+          components: [{
+            key: 'proj:src/shared.ts',
+            path: 'src/shared.ts',
+            name: 'shared.ts',
+            measures: [
+              { metric: 'duplicated_lines', value: '10' }
+            ]
+          }]
+        })
+        .mockResolvedValueOnce({
+          hotspots: [{
+            key: 'hot-1',
+            component: 'proj:src/auth.ts',
+            message: 'Review this auth flow.',
+            status: 'TO_REVIEW',
+            vulnerabilityProbability: 'HIGH'
+          }]
+        })
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: 'coverage', value: '82.1' },
+              { metric: 'duplicated_lines', value: '24' },
+              { metric: 'security_review_rating', value: 'A' }
+            ]
+          }
+        })
+        .mockResolvedValueOnce({
+          rules: [{ key: 'typescript:S1', name: 'Rule 1' }]
+        })
+    });
+    (backend as any).httpClient = client;
+
+    await expect(backend.getIssues()).resolves.toEqual([{
+      key: '1',
+      rule: 'typescript:S1',
+      message: 'Issue',
+      severity: 'MAJOR',
+      type: 'CODE_SMELL',
+      status: undefined,
+      component: 'proj:src/file.ts',
+      line: undefined,
+      effort: undefined,
+      tags: []
+    }]);
+    await expect(backend.getCoverageTargets()).resolves.toEqual([{
+      key: 'proj:src/file.ts',
+      component: 'src/file.ts',
+      path: 'src/file.ts',
+      coverage: 55.5,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      linesToCover: undefined,
+      uncoveredLines: 4,
+      conditionsToCover: undefined,
+      uncoveredConditions: undefined
+    }]);
+    await expect(backend.getDuplicationTargets()).resolves.toEqual([{
+      key: 'proj:src/shared.ts',
+      component: 'src/shared.ts',
+      path: 'src/shared.ts',
+      duplicatedLinesDensity: undefined,
+      duplicatedLines: 10,
+      duplicatedBlocks: undefined
+    }]);
+    await expect(backend.getSecurityHotspots()).resolves.toEqual([{
+      key: 'hot-1',
+      component: 'proj:src/auth.ts',
+      line: undefined,
+      message: 'Review this auth flow.',
+      status: 'TO_REVIEW',
+      vulnerabilityProbability: 'HIGH'
+    }]);
+    await expect(backend.getKpiSummary()).resolves.toEqual({
+      coverage: 82.1,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      duplicationDensity: undefined,
+      duplicatedLines: 24,
+      duplicatedBlocks: undefined,
+      securityHotspots: undefined,
+      securityHotspotsReviewed: undefined,
+      securityReviewRating: 'A'
+    });
+    await expect(backend.getRules(['typescript:S1'])).resolves.toEqual([
+      { key: 'typescript:S1', name: 'Rule 1', htmlDesc: undefined, severity: undefined, type: undefined }
+    ]);
+
+    expect(client.getJson).toHaveBeenNthCalledWith(1, '/api/issues/search', {
+      componentKeys: 'proj',
+      organization: 'org',
+      branch: 'main',
+      pullRequest: '42',
+      statuses: 'OPEN,CONFIRMED,REOPENED',
+      ps: 500
+    });
+    expect(client.getJson).toHaveBeenNthCalledWith(6, '/api/rules/search', {
+      organization: 'org',
+      rule_key: 'typescript:S1'
+    });
+  });
+
+  it('returns early for empty rule lists without calling the client', async () => {
+    const backend = new TestBackend(cloudConnection, 'token');
+    const client = mockClient({});
+    (backend as any).httpClient = client;
+
+    await expect(backend.getRules([])).resolves.toEqual([]);
+    expect(client.getJson).not.toHaveBeenCalled();
   });
 });
 

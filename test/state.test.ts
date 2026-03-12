@@ -156,6 +156,18 @@ describe('SelectionState', () => {
     expect(state.getSelectedCount()).toBe(0);
     expect(onDidChange).toHaveBeenCalledTimes(4);
   });
+
+  it('drops selected keys that are no longer present when known issues change', () => {
+    const state = new SelectionState();
+
+    state.setKnownIssues(issues);
+    state.selectMany([issues[0], issues[1]]);
+    state.setKnownIssues([issues[0]]);
+
+    expect(state.getSelectedCount()).toBe(1);
+    expect(state.getSelectedIssues()).toEqual([issues[0]]);
+    expect(state.isSelected('B')).toBe(false);
+  });
 });
 
 afterEach(() => {

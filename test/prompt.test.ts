@@ -59,6 +59,9 @@ describe('prompt helpers', () => {
       connection,
       source: 'issues',
       issues,
+      coverageTargets: [],
+      duplicationTargets: [],
+      hotspots: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
     });
   });
@@ -194,6 +197,43 @@ describe('prompt helpers', () => {
     })).toContain('1. acme_app:src/crypto.ts\n   Review crypto usage.');
   });
 
+  it('renders all selected items when multiple modes are included', () => {
+    const output = renderSelectionList({
+      target: 'codex',
+      style: 'balanced',
+      connection,
+      source: 'issues',
+      issues: [issues[0]],
+      coverageTargets: [{
+        key: 'cov-1',
+        component: 'acme_app:src/main.ts',
+        path: 'src/main.ts',
+        uncoveredLines: 4
+      }],
+      duplicationTargets: [{
+        key: 'dup-1',
+        component: 'acme_app:src/shared.ts',
+        path: 'src/shared.ts',
+        duplicatedLines: 18
+      }],
+      hotspots: [{
+        key: 'hs-1',
+        component: 'acme_app:src/auth.ts',
+        message: 'Review risky auth flow.'
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    });
+
+    expect(output).toContain('Selected issues:');
+    expect(output).toContain('Coverage targets:');
+    expect(output).toContain('Duplication targets:');
+    expect(output).toContain('Security hotspots to address:');
+    expect(output).toContain('typescript:S1111');
+    expect(output).toContain('src/main.ts');
+    expect(output).toContain('src/shared.ts');
+    expect(output).toContain('Review risky auth flow.');
+  });
+
   it('returns source-specific goals', () => {
     expect(getSourceGoal({
       target: 'codex',
@@ -219,6 +259,19 @@ describe('prompt helpers', () => {
       hotspots: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
     })).toContain('security hotspots');
+    expect(getSourceGoal({
+      target: 'codex',
+      style: 'balanced',
+      connection,
+      source: 'issues',
+      issues,
+      coverageTargets: [{
+        key: 'cov-1',
+        component: 'acme_app:src/main.ts',
+        path: 'src/main.ts'
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    })).toContain('across issues, coverage, duplication, and security hotspots');
   });
 
   it('returns source-specific headings, execution rules, and deliverables', () => {
@@ -278,6 +331,35 @@ describe('prompt helpers', () => {
       coverageTargets: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
     })[0]).toContain('Add or update tests');
+    expect(getSourceHeading({
+      target: 'codex',
+      style: 'balanced',
+      connection,
+      source: 'issues',
+      issues,
+      hotspots: [{
+        key: 'hs-1',
+        component: 'acme_app:src/auth.ts',
+        message: 'Review risky auth flow.'
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    })).toBe('Selected items across modes:');
+    expect(getSourceExecutionRules({
+      target: 'codex',
+      style: 'balanced',
+      connection,
+      source: 'issues',
+      issues,
+      duplicationTargets: [{
+        key: 'dup-1',
+        component: 'acme_app:src/shared.ts',
+        path: 'src/shared.ts'
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    })).toEqual(expect.arrayContaining([
+      '- Inspect the referenced files before editing.',
+      '- Inspect the duplicated code paths before editing.'
+    ]));
   });
 });
 
@@ -378,5 +460,27 @@ describe('target-specific prompt renderers', () => {
     expect(renderQwenPrompt(duplicationInput)).toContain('reduce the selected code duplication');
     expect(renderCodexPrompt({ ...hotspotInput, target: 'codex' })).toContain('remediating security hotspots');
     expect(renderQwenPrompt({ ...hotspotInput, target: 'qwen' })).toContain('fix the selected security hotspots');
+  });
+
+  it('renders mixed-mode prompts with combined framing and selection sections', () => {
+    const mixedInput = {
+      target: 'codex' as const,
+      style: 'guided' as const,
+      connection,
+      source: 'issues' as const,
+      issues: [issues[0]],
+      coverageTargets: [{
+        key: 'cov-1',
+        component: 'acme_app:src/main.ts',
+        path: 'src/main.ts',
+        uncoveredLines: 4
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    };
+
+    expect(renderCodexPrompt(mixedInput)).toContain('across multiple workspace modes');
+    expect(renderCodexPrompt(mixedInput)).toContain('Selected items across modes:');
+    expect(renderClaudePrompt({ ...mixedInput, target: 'claude' })).toContain('across the active workspace modes');
+    expect(renderQwenPrompt({ ...mixedInput, target: 'qwen' })).toContain('across all active workspace modes');
   });
 });

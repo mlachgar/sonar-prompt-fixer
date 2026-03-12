@@ -38,13 +38,13 @@ export class FindingsSummaryView implements vscode.WebviewViewProvider {
 
       if (message.type === 'selectProfile') {
         await this.connectionState.selectProfile(message.profileId);
-        await this.issuesProvider.reloadFindings();
         this.update();
         return;
       }
 
       if (message.type === 'refresh') {
         await this.issuesProvider.reloadFindings();
+        await this.issuesWorkspaceEditor.reloadData();
         this.update();
       }
     });

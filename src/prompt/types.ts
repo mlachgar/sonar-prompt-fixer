@@ -4,27 +4,22 @@ export type PromptTarget = 'codex' | 'claude' | 'qwen';
 export type PromptStyle = 'minimal' | 'balanced' | 'guided';
 export type PromptSource = 'issues' | 'coverage' | 'duplication' | 'hotspots';
 
-export type PromptSelection =
-  | {
-      source: 'issues';
-      issues: SonarIssue[];
-    }
-  | {
-      source: 'coverage';
-      coverageTargets: SonarCoverageTarget[];
-    }
-  | {
-      source: 'duplication';
-      duplicationTargets: SonarDuplicationTarget[];
-    }
-  | {
-      source: 'hotspots';
-      hotspots: SonarSecurityHotspot[];
-    };
+export type PromptSelection = {
+  source: PromptSource;
+  issues?: SonarIssue[];
+  coverageTargets?: SonarCoverageTarget[];
+  duplicationTargets?: SonarDuplicationTarget[];
+  hotspots?: SonarSecurityHotspot[];
+};
 
 export type CanonicalPromptInput = {
   target: PromptTarget;
   style: PromptStyle;
   connection: SonarConnection;
   generatedAt: string;
-} & PromptSelection;
+  source: PromptSource;
+  issues?: SonarIssue[];
+  coverageTargets?: SonarCoverageTarget[];
+  duplicationTargets?: SonarDuplicationTarget[];
+  hotspots?: SonarSecurityHotspot[];
+};

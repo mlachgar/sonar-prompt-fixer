@@ -129,6 +129,18 @@ export class IssuesWorkspaceEditor {
     return this.currentPrompt;
   }
 
+  public async reloadData(): Promise<void> {
+    this.supplementaryLoaded = false;
+    this.currentPrompt = '';
+
+    if (!this.panel) {
+      return;
+    }
+
+    await this.loadSupplementaryData();
+    this.update();
+  }
+
   public update(): void {
     if (!this.panel) {
       return;
@@ -152,6 +164,7 @@ export class IssuesWorkspaceEditor {
     return {
       mode: this.mode,
       totalCount: this.getTotalCount(),
+      modeSelectedCount: this.getModeSelectedCount(),
       visibleCount: this.getVisibleCount(visibleIssues, visibleCoverageTargets, visibleDuplicationTargets, visibleHotspots),
       selectedCount: this.getSelectedCount(),
       filters: this.filterState.getFilters(),
@@ -325,29 +338,13 @@ export class IssuesWorkspaceEditor {
   }
 
   private getPromptSelection() {
-    switch (this.mode) {
-      case 'coverage':
-        return {
-          source: 'coverage' as const,
-          coverageTargets: this.coverageTargets.filter((target) => this.selectedCoverageKeys.has(target.key))
-        };
-      case 'duplication':
-        return {
-          source: 'duplication' as const,
-          duplicationTargets: this.duplicationTargets.filter((target) => this.selectedDuplicationKeys.has(target.key))
-        };
-      case 'hotspots':
-        return {
-          source: 'hotspots' as const,
-          hotspots: this.hotspots.filter((hotspot) => this.selectedHotspotKeys.has(hotspot.key))
-        };
-      case 'issues':
-      default:
-        return {
-          source: 'issues' as const,
-          issues: this.selectionState.getSelectedIssues()
-        };
-    }
+    return {
+      source: this.mode,
+      issues: this.selectionState.getSelectedIssues(),
+      coverageTargets: this.coverageTargets.filter((target) => this.selectedCoverageKeys.has(target.key)),
+      duplicationTargets: this.duplicationTargets.filter((target) => this.selectedDuplicationKeys.has(target.key)),
+      hotspots: this.hotspots.filter((hotspot) => this.selectedHotspotKeys.has(hotspot.key))
+    };
   }
 
   private getVisibleCoverageTargets(): SonarCoverageTarget[] {
@@ -419,6 +416,13 @@ export class IssuesWorkspaceEditor {
   }
 
   private getSelectedCount(): number {
+    return this.selectionState.getSelectedCount()
+      + this.selectedCoverageKeys.size
+      + this.selectedDuplicationKeys.size
+      + this.selectedHotspotKeys.size;
+  }
+
+  private getModeSelectedCount(): number {
     switch (this.mode) {
       case 'coverage':
         return this.selectedCoverageKeys.size;

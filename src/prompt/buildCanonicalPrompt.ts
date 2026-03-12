@@ -11,7 +11,11 @@ export function buildCanonicalPromptInput(
     target,
     style,
     connection,
-    ...selection,
+    source: selection.source,
+    issues: selection.issues ?? [],
+    coverageTargets: selection.coverageTargets ?? [],
+    duplicationTargets: selection.duplicationTargets ?? [],
+    hotspots: selection.hotspots ?? [],
     generatedAt: new Date().toISOString()
   };
 }

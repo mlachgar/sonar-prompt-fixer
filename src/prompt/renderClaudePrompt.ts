@@ -27,6 +27,10 @@ export function renderClaudePrompt(input: CanonicalPromptInput): string {
 }
 
 function getClaudeIntro(input: CanonicalPromptInput): string {
+  if (hasMixedSelections(input)) {
+    return 'Please address the selected Sonar items across the active workspace modes in this codebase.';
+  }
+
   switch (input.source) {
     case 'coverage':
       return 'Please improve test coverage for the selected code paths in this codebase.';
@@ -41,6 +45,10 @@ function getClaudeIntro(input: CanonicalPromptInput): string {
 }
 
 function getClaudeObjective(input: CanonicalPromptInput): string {
+  if (hasMixedSelections(input)) {
+    return `Objective: address the selected Sonar issues, coverage gaps, duplication targets, and security hotspots for project "${input.connection.projectKey}" with precise, low-risk changes.`;
+  }
+
   switch (input.source) {
     case 'coverage':
       return `Objective: produce focused tests for project "${input.connection.projectKey}" that cover the selected gaps while keeping production changes minimal.`;
@@ -52,4 +60,14 @@ function getClaudeObjective(input: CanonicalPromptInput): string {
     default:
       return `Objective: produce precise fixes for project "${input.connection.projectKey}" while preserving current behavior and avoiding opportunistic refactors.`;
   }
+}
+
+function hasMixedSelections(input: CanonicalPromptInput): boolean {
+  return (input.issues?.length ?? 0) > 0 &&
+    ((input.coverageTargets?.length ?? 0) > 0 ||
+      (input.duplicationTargets?.length ?? 0) > 0 ||
+      (input.hotspots?.length ?? 0) > 0) ||
+    ((input.coverageTargets?.length ?? 0) > 0 &&
+      ((input.duplicationTargets?.length ?? 0) > 0 || (input.hotspots?.length ?? 0) > 0)) ||
+    ((input.duplicationTargets?.length ?? 0) > 0 && (input.hotspots?.length ?? 0) > 0);
 }

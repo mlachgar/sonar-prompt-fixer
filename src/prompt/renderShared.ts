@@ -1,49 +1,12 @@
 import { CanonicalPromptInput } from './types';
 
 export function renderSelectionList(input: CanonicalPromptInput): string {
-  switch (input.source) {
-    case 'coverage':
-      return input.coverageTargets
-        .map((target, index) => {
-          const coverage = formatPercent(target.coverage);
-          const lineCoverage = formatPercent(target.lineCoverage);
-          const branchCoverage = formatPercent(target.branchCoverage);
-          const coverageFocus = describeCoverageFocus(target.uncoveredLines, target.uncoveredConditions);
-
-          return `${index + 1}. ${target.path} | coverage: ${coverage} | line coverage: ${lineCoverage} | branch coverage: ${branchCoverage}\n   ${coverageFocus}`;
-        })
-        .join('\n');
-    case 'duplication':
-      return input.duplicationTargets
-        .map((target, index) => {
-          const duplicationDensity = formatPercent(target.duplicatedLinesDensity);
-          const focus = describeDuplicationFocus(target.duplicatedLines, target.duplicatedBlocks);
-
-          return `${index + 1}. ${target.path} | duplication: ${duplicationDensity} | duplicated lines: ${formatNumber(target.duplicatedLines)} | duplicated blocks: ${formatNumber(target.duplicatedBlocks)}\n   ${focus}`;
-        })
-        .join('\n');
-    case 'hotspots':
-      return input.hotspots
-        .map((hotspot, index) => {
-          const location = hotspot.line ? `${hotspot.component}:${hotspot.line}` : hotspot.component;
-          const probability = hotspot.vulnerabilityProbability ? ` | probability: ${hotspot.vulnerabilityProbability}` : '';
-          const status = hotspot.status ? ` | status: ${hotspot.status}` : '';
-
-          return `${index + 1}. ${location}${status}${probability}\n   ${hotspot.message}`;
-        })
-        .join('\n');
-    case 'issues':
-    default:
-      return input.issues
-        .map((issue, index) => {
-          const location = issue.line ? `${issue.component}:${issue.line}` : issue.component;
-          const tags = issue.tags && issue.tags.length > 0 ? ` | tags: ${issue.tags.join(', ')}` : '';
-          const effort = issue.effort ? ` | effort: ${issue.effort}` : '';
-          const status = issue.status ? ` | status: ${issue.status}` : '';
-          return `${index + 1}. [${issue.severity}/${issue.type}] ${issue.rule} at ${location}${status}${effort}${tags}\n   ${issue.message}`;
-        })
-        .join('\n');
+  const sections = getSelectionSections(input);
+  if (sections.length <= 1) {
+    return sections[0]?.body ?? '';
   }
+
+  return sections.map((section) => `${section.heading}\n${section.body}`).join('\n\n');
 }
 
 export function renderSharedConstraints(style: CanonicalPromptInput['style']): string {
@@ -73,7 +36,11 @@ function getStyleLine(style: CanonicalPromptInput['style']): string {
 }
 
 export function getSourceGoal(input: CanonicalPromptInput): string {
-  switch (input.source) {
+  if (hasMixedSelections(input)) {
+    return `Goal: Address the selected Sonar items for project "${input.connection.projectKey}" across issues, coverage, duplication, and security hotspots with minimal, safe code changes.`;
+  }
+
+  switch (getPrimarySource(input)) {
     case 'coverage':
       return `Goal: Add tests for project "${input.connection.projectKey}" that cover the selected uncovered lines and branches with minimal production-code changes.`;
     case 'duplication':
@@ -87,7 +54,11 @@ export function getSourceGoal(input: CanonicalPromptInput): string {
 }
 
 export function getSourceHeading(input: CanonicalPromptInput): string {
-  switch (input.source) {
+  if (hasMixedSelections(input)) {
+    return 'Selected items across modes:';
+  }
+
+  switch (getPrimarySource(input)) {
     case 'coverage':
       return 'Coverage targets:';
     case 'duplication':
@@ -101,7 +72,11 @@ export function getSourceHeading(input: CanonicalPromptInput): string {
 }
 
 export function getSourceExecutionRules(input: CanonicalPromptInput): string[] {
-  switch (input.source) {
+  if (hasMixedSelections(input)) {
+    return dedupeLines(getActiveSources(input).flatMap((source) => getRulesForSource(source)));
+  }
+
+  switch (getPrimarySource(input)) {
     case 'coverage':
       return [
         '- Inspect the referenced files and existing tests before editing.',
@@ -131,7 +106,11 @@ export function getSourceExecutionRules(input: CanonicalPromptInput): string[] {
 }
 
 export function getSourceDeliverables(input: CanonicalPromptInput): string[] {
-  switch (input.source) {
+  if (hasMixedSelections(input)) {
+    return dedupeLines(getActiveSources(input).flatMap((source) => getDeliverablesForSource(source)));
+  }
+
+  switch (getPrimarySource(input)) {
     case 'coverage':
       return [
         '- Add or update tests to improve coverage.',
@@ -203,3 +182,166 @@ function describeDuplicationFocus(duplicatedLines?: number, duplicatedBlocks?: n
 
   return `Refactor to reduce ${focusParts.join(' and ')} while preserving behavior.`;
 }
+
+function getSelectionSections(input: CanonicalPromptInput): Array<{ source: string; heading: string; body: string }> {
+  const orderedSources = [input.source, ...ALL_SOURCES.filter((source) => source !== input.source)];
+  const seen = new Set<string>();
+  const sections: Array<{ source: string; heading: string; body: string }> = [];
+
+  for (const source of orderedSources) {
+    if (seen.has(source)) {
+      continue;
+    }
+    seen.add(source);
+
+    const body = renderSingleSourceSelectionList(input, source);
+    if (body) {
+      sections.push({
+        source,
+        heading: getHeadingForSource(source),
+        body
+      });
+    }
+  }
+
+  return sections;
+}
+
+function renderSingleSourceSelectionList(input: CanonicalPromptInput, source: string): string {
+  switch (source) {
+    case 'coverage':
+      return (input.coverageTargets ?? [])
+        .map((target, index) => {
+          const coverage = formatPercent(target.coverage);
+          const lineCoverage = formatPercent(target.lineCoverage);
+          const branchCoverage = formatPercent(target.branchCoverage);
+          const coverageFocus = describeCoverageFocus(target.uncoveredLines, target.uncoveredConditions);
+
+          return `${index + 1}. ${target.path} | coverage: ${coverage} | line coverage: ${lineCoverage} | branch coverage: ${branchCoverage}\n   ${coverageFocus}`;
+        })
+        .join('\n');
+    case 'duplication':
+      return (input.duplicationTargets ?? [])
+        .map((target, index) => {
+          const duplicationDensity = formatPercent(target.duplicatedLinesDensity);
+          const focus = describeDuplicationFocus(target.duplicatedLines, target.duplicatedBlocks);
+
+          return `${index + 1}. ${target.path} | duplication: ${duplicationDensity} | duplicated lines: ${formatNumber(target.duplicatedLines)} | duplicated blocks: ${formatNumber(target.duplicatedBlocks)}\n   ${focus}`;
+        })
+        .join('\n');
+    case 'hotspots':
+      return (input.hotspots ?? [])
+        .map((hotspot, index) => {
+          const location = hotspot.line ? `${hotspot.component}:${hotspot.line}` : hotspot.component;
+          const probability = hotspot.vulnerabilityProbability ? ` | probability: ${hotspot.vulnerabilityProbability}` : '';
+          const status = hotspot.status ? ` | status: ${hotspot.status}` : '';
+
+          return `${index + 1}. ${location}${status}${probability}\n   ${hotspot.message}`;
+        })
+        .join('\n');
+    case 'issues':
+    default:
+      return (input.issues ?? [])
+        .map((issue, index) => {
+          const location = issue.line ? `${issue.component}:${issue.line}` : issue.component;
+          const tags = issue.tags && issue.tags.length > 0 ? ` | tags: ${issue.tags.join(', ')}` : '';
+          const effort = issue.effort ? ` | effort: ${issue.effort}` : '';
+          const status = issue.status ? ` | status: ${issue.status}` : '';
+          return `${index + 1}. [${issue.severity}/${issue.type}] ${issue.rule} at ${location}${status}${effort}${tags}\n   ${issue.message}`;
+        })
+        .join('\n');
+  }
+}
+
+function hasMixedSelections(input: CanonicalPromptInput): boolean {
+  return getActiveSources(input).length > 1;
+}
+
+function getPrimarySource(input: CanonicalPromptInput): string {
+  return getActiveSources(input)[0] ?? input.source;
+}
+
+function getActiveSources(input: CanonicalPromptInput): string[] {
+  const sections = getSelectionSections(input);
+  return sections.map((section) => section.source);
+}
+
+function getHeadingForSource(source: string): string {
+  switch (source) {
+    case 'coverage':
+      return 'Coverage targets:';
+    case 'duplication':
+      return 'Duplication targets:';
+    case 'hotspots':
+      return 'Security hotspots to address:';
+    case 'issues':
+    default:
+      return 'Selected issues:';
+  }
+}
+
+function getRulesForSource(source: string): string[] {
+  switch (source) {
+    case 'coverage':
+      return [
+        '- Inspect the referenced files and existing tests before editing.',
+        '- Prefer adding or extending tests over changing production logic.',
+        '- If small production changes are required for testability, keep them minimal and justified.'
+      ];
+    case 'duplication':
+      return [
+        '- Inspect the duplicated code paths before editing.',
+        '- Prefer small extractions or shared helpers over broad architectural rewrites.',
+        '- Preserve behavior and call out any duplication that should remain for clarity or safety.'
+      ];
+    case 'hotspots':
+      return [
+        '- Inspect the risky code path before editing.',
+        '- Preserve behavior while removing or reducing the security risk.',
+        '- Call out any hotspot that still needs human security review.'
+      ];
+    case 'issues':
+    default:
+      return [
+        '- Inspect the referenced files before editing.',
+        '- Make the smallest change that fully addresses each issue.',
+        '- Call out any issue that cannot be resolved confidently from the available code.'
+      ];
+  }
+}
+
+function getDeliverablesForSource(source: string): string[] {
+  switch (source) {
+    case 'coverage':
+      return [
+        '- Add or update tests to improve coverage.',
+        '- Summarize what changed by file.',
+        '- Mention any remaining uncovered logic that could not be tested safely.'
+      ];
+    case 'duplication':
+      return [
+        '- Implement the duplication reduction changes.',
+        '- Summarize what changed by file.',
+        '- Mention any remaining duplication that should be kept or deferred.'
+      ];
+    case 'hotspots':
+      return [
+        '- Implement the remediation changes.',
+        '- Summarize what changed by file.',
+        '- Mention any remaining risks or follow-up security review items.'
+      ];
+    case 'issues':
+    default:
+      return [
+        '- Implement the fixes.',
+        '- Summarize what changed by file.',
+        '- Mention any remaining risks or follow-up items.'
+      ];
+  }
+}
+
+function dedupeLines(lines: string[]): string[] {
+  return [...new Set(lines)];
+}
+
+const ALL_SOURCES = ['issues', 'coverage', 'duplication', 'hotspots'] as const;

@@ -13,6 +13,7 @@ type WorkspaceMode = 'issues' | 'coverage' | 'duplication' | 'hotspots';
 
 type IssuesWorkspaceModel = {
   mode: WorkspaceMode;
+  modeSelectedCount: number;
   selectedCount: number;
   visibleCount: number;
   totalCount: number;
@@ -775,7 +776,7 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
         return value === undefined || value === null ? 'n/a' : String(value);
       }
 
-      let currentSelectionCount = model.selectedCount;
+      let currentSelectionCount = model.modeSelectedCount;
       let currentTotalCount = model.totalCount;
       for (const config of comboConfigs) {
         createCombo(config);
@@ -783,7 +784,7 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
 
       function render(data) {
         currentMode = data.mode;
-        currentSelectionCount = data.selectedCount;
+        currentSelectionCount = data.modeSelectedCount;
         currentTotalCount = data.totalCount;
         totalCount.textContent = data.totalCount + ' total';
         visibleCount.textContent = data.visibleCount + ' visible';

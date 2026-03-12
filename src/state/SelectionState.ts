@@ -9,6 +9,11 @@ export class SelectionState {
 
   public setKnownIssues(issues: SonarIssue[]): void {
     this.issueByKey = new Map(issues.map((issue) => [issue.key, issue]));
+    for (const key of [...this.selectedKeys]) {
+      if (!this.issueByKey.has(key)) {
+        this.selectedKeys.delete(key);
+      }
+    }
   }
 
   public isSelected(issueKey: string): boolean {

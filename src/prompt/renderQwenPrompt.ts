@@ -27,6 +27,10 @@ export function renderQwenPrompt(input: CanonicalPromptInput): string {
 }
 
 function getQwenIntro(input: CanonicalPromptInput): string {
+  if (hasMixedSelections(input)) {
+    return 'Task: address the selected Sonar items across all active workspace modes in the current repository.';
+  }
+
   switch (input.source) {
     case 'coverage':
       return 'Task: add tests for the selected coverage gaps in the current repository.';
@@ -41,6 +45,10 @@ function getQwenIntro(input: CanonicalPromptInput): string {
 }
 
 function getQwenGoal(input: CanonicalPromptInput): string {
+  if (hasMixedSelections(input)) {
+    return `Primary goal: address the selected Sonar issues, coverage gaps, duplication targets, and security hotspots for project "${input.connection.projectKey}" with low-risk, localized edits.`;
+  }
+
   switch (input.source) {
     case 'coverage':
       return `Primary goal: increase coverage for project "${input.connection.projectKey}" with targeted tests and minimal production edits.`;
@@ -52,4 +60,14 @@ function getQwenGoal(input: CanonicalPromptInput): string {
     default:
       return `Primary goal: address the findings for project "${input.connection.projectKey}" with low-risk, localized edits.`;
   }
+}
+
+function hasMixedSelections(input: CanonicalPromptInput): boolean {
+  return (input.issues?.length ?? 0) > 0 &&
+    ((input.coverageTargets?.length ?? 0) > 0 ||
+      (input.duplicationTargets?.length ?? 0) > 0 ||
+      (input.hotspots?.length ?? 0) > 0) ||
+    ((input.coverageTargets?.length ?? 0) > 0 &&
+      ((input.duplicationTargets?.length ?? 0) > 0 || (input.hotspots?.length ?? 0) > 0)) ||
+    ((input.duplicationTargets?.length ?? 0) > 0 && (input.hotspots?.length ?? 0) > 0);
 }

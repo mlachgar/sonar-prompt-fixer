@@ -28,6 +28,10 @@ export function renderCodexPrompt(input: CanonicalPromptInput): string {
 }
 
 function getCodexIntro(input: CanonicalPromptInput): string {
+  if (hasMixedSelections(input)) {
+    return 'You are addressing selected Sonar items across multiple workspace modes in this repository.';
+  }
+
   switch (input.source) {
     case 'coverage':
       return 'You are improving test coverage in this repository.';
@@ -39,4 +43,14 @@ function getCodexIntro(input: CanonicalPromptInput): string {
     default:
       return 'You are fixing Sonar issues in this repository.';
   }
+}
+
+function hasMixedSelections(input: CanonicalPromptInput): boolean {
+  return (input.issues?.length ?? 0) > 0 &&
+    ((input.coverageTargets?.length ?? 0) > 0 ||
+      (input.duplicationTargets?.length ?? 0) > 0 ||
+      (input.hotspots?.length ?? 0) > 0) ||
+    ((input.coverageTargets?.length ?? 0) > 0 &&
+      ((input.duplicationTargets?.length ?? 0) > 0 || (input.hotspots?.length ?? 0) > 0)) ||
+    ((input.duplicationTargets?.length ?? 0) > 0 && (input.hotspots?.length ?? 0) > 0);
 }

@@ -43,9 +43,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       issuesWorkspaceEditor.update();
     }),
     connectionState.onDidChange(() => {
-      void issuesProvider.reloadFindings();
+      void (async () => {
+        await issuesProvider.reloadFindings();
+        await issuesWorkspaceEditor.reloadData();
+        findingsSummaryView.update();
+      })();
       configurationEditor.update();
-      issuesWorkspaceEditor.update();
       findingsSummaryView.update();
     }),
     issuesProvider.onDidChangeIssues(() => {
