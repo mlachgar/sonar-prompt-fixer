@@ -8,6 +8,8 @@ import { SelectionState } from './state/SelectionState';
 import { ConfigurationEditor } from './webview/configurationEditor';
 import { IssuesWorkspaceEditor } from './webview/issuesWorkspaceEditor';
 
+const ONBOARDING_KEY = 'sonarPromptFixer.onboardingShown';
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const connectionState = new ConnectionState(context);
   const filterState = new FilterState();
@@ -47,4 +49,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   await configurationEditor.initialize();
+  queueOnboarding(context);
+}
+
+function queueOnboarding(context: vscode.ExtensionContext): void {
+  setTimeout(() => {
+    void showOnboardingIfNeeded(context);
+  }, 0);
+}
+
+async function showOnboardingIfNeeded(context: vscode.ExtensionContext): Promise<void> {
+  if (context.globalState.get<boolean>(ONBOARDING_KEY)) {
+    return;
+  }
+
+  await context.globalState.update(ONBOARDING_KEY, true);
+
+  const action = await vscode.window.showInformationMessage(
+    'Sonar Prompt Fixer is available in the Activity Bar. Open the Issues view to configure the connection or review issues.',
+    'Open Configuration',
+    'Open Issues Workspace'
+  );
+
+  if (action === 'Open Configuration') {
+    await vscode.commands.executeCommand('sonarPromptFixer.openConfigurationEditor');
+    return;
+  }
+
+  if (action === 'Open Issues Workspace') {
+    await vscode.commands.executeCommand('sonarPromptFixer.openIssuesWorkspace');
+  }
 }

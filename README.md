@@ -6,6 +6,8 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
 
 - Unified connection model for SonarQube Cloud and SonarQube Server
 - Secure token storage with VS Code `SecretStorage`
+- Automatic configuration prefill from `sonar-project.properties` when project key or organization are not yet set
+- Automatic token fallback from `.env` when `SONAR_TOKEN` is present and no token is stored yet
 - Configuration editor opened from the Issues view
 - Lightweight sidebar issue summary with workspace launcher
 - Editor-based two-step Issues Workspace for filtering, bulk selection, and prompt generation
@@ -35,11 +37,20 @@ Key settings:
 
 You can set these from the configuration editor opened from the `Issues` view.
 
+When the saved configuration is still empty, the extension also tries to prefill:
+
+- `projectKey` from `sonar.projectKey` in `sonar-project.properties`
+- `organization` from `sonar.organization` in `sonar-project.properties`
+
+Explicit VS Code settings always win over file-based defaults.
+
 ## Secure Token Storage
 
 Do not store your Sonar token in plain settings.
 
 Use the configuration editor to save or remove the token. The token is stored in VS Code `SecretStorage`. Enter an empty value to delete the stored token.
+
+If no token is stored yet, the extension also tries to read `SONAR_TOKEN` from a local `.env` file in the workspace or extension root.
 
 ## Commands
 
@@ -100,10 +111,11 @@ npm run test:coverage
 4. Press `F5` to launch the Extension Development Host.
 5. In the new window, open the `Sonar Prompt Fixer` sidebar.
 6. In the `Issues` view, open the configuration editor.
-7. Save your settings and token, then test the connection from that editor.
-8. In the `Issues` view, click the workspace button to open the editor-based Issues Workspace.
-9. Use step 1 of the Issues Workspace to filter issues and select findings.
-10. Move to step 2 to generate and copy the prompt.
+7. Review the prefilled values from `sonar-project.properties` and `.env` if those files exist.
+8. Save your settings and token, then test the connection from that editor.
+9. In the `Issues` view, click the workspace button to open the editor-based Issues Workspace.
+10. Use step 1 of the Issues Workspace to filter issues and select findings.
+11. Move to step 2 to generate and copy the prompt.
 
 ## How To Test
 
@@ -113,6 +125,8 @@ npm run test:coverage
   - invalid token
   - wrong project key
   - self-signed certificate setup
+- Confirm empty configuration is prefilled from `sonar-project.properties` when available.
+- Confirm a stored token still takes precedence over `.env`.
 - Fetch issues and test local filtering by:
   - type
   - severity
@@ -160,7 +174,6 @@ Recommended coverage strategy for this codebase:
 - The tree currently groups by one setting at a time: severity or type.
 - The sidebar is intentionally lightweight; rich issue filtering and prompt actions live in the Issues Workspace.
 - The webview is intentionally lightweight and does not use an external frontend framework.
-- CI expects GitHub repository variables for SonarQube Cloud project identification.
 
 ## Architecture Overview
 

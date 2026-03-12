@@ -11,7 +11,7 @@ export class ConnectionState {
 
   public getConnection(): SonarConnection {
     const config = vscode.workspace.getConfiguration('sonarPromptFixer');
-    const fallbackProperties = loadSonarProjectProperties();
+    const fallbackProperties = loadSonarProjectProperties(this.context.extensionPath);
     const baseUrl = config.get<string>('connection.baseUrl', 'https://sonarcloud.io').trim();
     const configuredProjectKey = config.get<string>('connection.projectKey', '').trim();
     const configuredOrganization = config.get<string>('connection.organization', '').trim();
@@ -33,7 +33,7 @@ export class ConnectionState {
   }
 
   public async getToken(): Promise<string | undefined> {
-    return loadToken(this.context.secrets);
+    return loadToken(this.context.secrets, this.context.extensionPath);
   }
 
   public async updateSetting<T>(section: string, value: T): Promise<void> {

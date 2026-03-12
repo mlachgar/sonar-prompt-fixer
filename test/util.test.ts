@@ -1,8 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 import { mapConnectionError } from '../src/util/diagnostics';
 import { ConfigurationError, HttpError, isErrorWithCode } from '../src/util/errors';
 import { deleteToken, loadToken, storeToken } from '../src/util/secrets';
-import { createSecretStorage } from './vscodeMock';
+import { createSecretStorage, setWorkspaceFolders } from './vscodeMock';
+
+afterEach(() => {
+  setWorkspaceFolders([{ uri: { fsPath: process.cwd() } }]);
+});
 
 describe('diagnostics and error helpers', () => {
   it('maps HTTP status failures into connection diagnostics', () => {
@@ -75,12 +82,16 @@ describe('diagnostics and error helpers', () => {
 
 describe('secret helpers', () => {
   it('stores, loads, and deletes the token', async () => {
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-secret-only-'));
+    setWorkspaceFolders(undefined);
     const secrets = createSecretStorage();
 
     await storeToken(secrets as never, '  token-value  ');
-    await expect(loadToken(secrets as never)).resolves.toBe('token-value');
+    await expect(loadToken(secrets as never, extensionPath)).resolves.toBe('token-value');
 
     await deleteToken(secrets as never);
-    await expect(loadToken(secrets as never)).resolves.toBeUndefined();
+    await expect(loadToken(secrets as never, extensionPath)).resolves.toBeUndefined();
+
+    fs.rmSync(extensionPath, { recursive: true, force: true });
   });
 });

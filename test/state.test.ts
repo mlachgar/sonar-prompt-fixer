@@ -178,7 +178,7 @@ describe('ConnectionState', () => {
     });
 
     const secrets = createSecretStorage({ 'sonarPromptFixer.token': 'secret-token' });
-    const state = new ConnectionState({ secrets } as never);
+    const state = new ConnectionState({ secrets, extensionPath: '/extension' } as never);
 
     expect(state.getConnection()).toEqual({
       type: 'server',
@@ -207,7 +207,7 @@ describe('ConnectionState', () => {
       'sonar.projectKey=from-file\nsonar.organization=from-org\n'
     );
 
-    const state = new ConnectionState({ secrets: createSecretStorage() } as never);
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
 
     expect(state.getConnection()).toMatchObject({
       projectKey: 'from-file',
@@ -215,6 +215,30 @@ describe('ConnectionState', () => {
     });
 
     fs.rmSync(workspacePath, { recursive: true, force: true });
+  });
+
+  it('falls back to the extension path when no workspace folder is open', () => {
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-extension-'));
+    setWorkspaceFolders(undefined);
+    setConfiguration({
+      'connection.type': 'cloud',
+      'connection.baseUrl': 'https://sonarcloud.io',
+      'connection.projectKey': '',
+      'connection.organization': ''
+    });
+    fs.writeFileSync(
+      path.join(extensionPath, 'sonar-project.properties'),
+      'sonar.projectKey=from-extension\nsonar.organization=from-extension-org\n'
+    );
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath } as never);
+
+    expect(state.getConnection()).toMatchObject({
+      projectKey: 'from-extension',
+      organization: 'from-extension-org'
+    });
+
+    fs.rmSync(extensionPath, { recursive: true, force: true });
   });
 
   it('does not override explicit settings with sonar-project.properties values', () => {
@@ -231,7 +255,7 @@ describe('ConnectionState', () => {
       'sonar.projectKey=from-file\nsonar.organization=from-org\n'
     );
 
-    const state = new ConnectionState({ secrets: createSecretStorage() } as never);
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
 
     expect(state.getConnection()).toMatchObject({
       projectKey: 'configured-key',
@@ -243,7 +267,7 @@ describe('ConnectionState', () => {
 
   it('updates settings, updates full connection, and notifies listeners', async () => {
     const secrets = createSecretStorage();
-    const state = new ConnectionState({ secrets } as never);
+    const state = new ConnectionState({ secrets, extensionPath: '/extension' } as never);
     const onDidChange = vi.fn();
     state.onDidChange(onDidChange);
 
@@ -280,7 +304,7 @@ describe('ConnectionState', () => {
   });
 
   it('falls back to default values when optional connection fields are omitted', async () => {
-    const state = new ConnectionState({ secrets: createSecretStorage() } as never);
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
 
     await state.updateConnection({
       type: 'server',
@@ -295,5 +319,29 @@ describe('ConnectionState', () => {
       { key: 'connection.verifyTls', value: true, target: ConfigurationTarget.Global },
       { key: 'connection.authMode', value: 'bearer', target: ConfigurationTarget.Global }
     ]);
+  });
+
+  it('falls back to SONAR_TOKEN from .env when secret storage is empty', async () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-env-token-'));
+    setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
+    fs.writeFileSync(path.join(workspacePath, '.env'), 'SONAR_TOKEN="from-env-token"\n');
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
+
+    await expect(state.getToken()).resolves.toBe('from-env-token');
+
+    fs.rmSync(workspacePath, { recursive: true, force: true });
+  });
+
+  it('falls back to SONAR_TOKEN from the extension path .env when no workspace is open', async () => {
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-extension-env-'));
+    setWorkspaceFolders(undefined);
+    fs.writeFileSync(path.join(extensionPath, '.env'), "SONAR_TOKEN='from-extension-env'\n");
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath } as never);
+
+    await expect(state.getToken()).resolves.toBe('from-extension-env');
+
+    fs.rmSync(extensionPath, { recursive: true, force: true });
   });
 });

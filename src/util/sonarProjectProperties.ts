@@ -7,19 +7,18 @@ type SonarProjectProperties = {
   organization?: string;
 };
 
-export function loadSonarProjectProperties(): SonarProjectProperties {
-  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!workspacePath) {
-    return {};
+export function loadSonarProjectProperties(extensionPath?: string): SonarProjectProperties {
+  for (const rootPath of getSearchRoots(extensionPath)) {
+    const propertiesPath = path.join(rootPath, 'sonar-project.properties');
+    if (!fs.existsSync(propertiesPath)) {
+      continue;
+    }
+
+    const fileContent = fs.readFileSync(propertiesPath, 'utf8');
+    return parseSonarProjectProperties(fileContent);
   }
 
-  const propertiesPath = path.join(workspacePath, 'sonar-project.properties');
-  if (!fs.existsSync(propertiesPath)) {
-    return {};
-  }
-
-  const fileContent = fs.readFileSync(propertiesPath, 'utf8');
-  return parseSonarProjectProperties(fileContent);
+  return {};
 }
 
 export function parseSonarProjectProperties(fileContent: string): SonarProjectProperties {
@@ -47,4 +46,11 @@ export function parseSonarProjectProperties(fileContent: string): SonarProjectPr
   }
 
   return values;
+}
+
+function getSearchRoots(extensionPath?: string): string[] {
+  const workspaceRoots = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [];
+  const roots = extensionPath ? [...workspaceRoots, extensionPath] : workspaceRoots;
+
+  return [...new Set(roots)];
 }
