@@ -4,12 +4,20 @@ import * as vscode from 'vscode';
 
 const SECRET_KEY = 'sonarPromptFixer.token';
 
-export async function storeToken(secrets: vscode.SecretStorage, token: string): Promise<void> {
-  await secrets.store(SECRET_KEY, token.trim());
+export async function storeToken(secrets: vscode.SecretStorage, token: string, profileId?: string): Promise<void> {
+  await secrets.store(getSecretKey(profileId), token.trim());
 }
 
-export async function loadToken(secrets: vscode.SecretStorage, extensionPath?: string): Promise<string | undefined> {
-  const storedToken = await secrets.get(SECRET_KEY);
+export async function loadStoredToken(secrets: vscode.SecretStorage, profileId?: string): Promise<string | undefined> {
+  return secrets.get(getSecretKey(profileId));
+}
+
+export async function loadToken(
+  secrets: vscode.SecretStorage,
+  extensionPath?: string,
+  profileId?: string
+): Promise<string | undefined> {
+  const storedToken = await loadStoredToken(secrets, profileId);
   if (storedToken) {
     return storedToken;
   }
@@ -17,8 +25,8 @@ export async function loadToken(secrets: vscode.SecretStorage, extensionPath?: s
   return loadTokenFromEnv(extensionPath);
 }
 
-export async function deleteToken(secrets: vscode.SecretStorage): Promise<void> {
-  await secrets.delete(SECRET_KEY);
+export async function deleteToken(secrets: vscode.SecretStorage, profileId?: string): Promise<void> {
+  await secrets.delete(getSecretKey(profileId));
 }
 
 function loadTokenFromEnv(extensionPath?: string): string | undefined {
@@ -74,4 +82,8 @@ function getSearchRoots(extensionPath?: string): string[] {
   const roots = extensionPath ? [...workspaceRoots, extensionPath] : workspaceRoots;
 
   return [...new Set(roots)];
+}
+
+function getSecretKey(profileId?: string): string {
+  return profileId ? `${SECRET_KEY}.${profileId}` : SECRET_KEY;
 }

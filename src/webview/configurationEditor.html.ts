@@ -1,8 +1,15 @@
 import { randomBytes } from 'node:crypto';
-import { SonarConnection } from '../sonar/types';
+import { SonarConnection, SonarConnectionProfile } from '../sonar/types';
 
 type ConfigurationEditorModel = {
-  connection: SonarConnection;
+  profiles: Array<{
+    id: string;
+    name: string;
+    type: SonarConnection['type'];
+    baseUrl: string;
+    projectKey: string;
+  }>;
+  activeProfile: SonarConnectionProfile;
   hasToken: boolean;
   token: string;
   statusMessage: string;
@@ -48,7 +55,7 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         font: 14px/1.5 "Avenir Next", "Segoe UI", sans-serif;
       }
       .page {
-        max-width: 1100px;
+        max-width: 1180px;
         margin: 0 auto;
         padding: 28px;
       }
@@ -73,13 +80,13 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         font-weight: 700;
       }
       .lead {
-        max-width: 720px;
+        max-width: 760px;
         margin: 12px 0 0;
         color: var(--muted);
         font-size: 15px;
       }
       .heroCard {
-        min-width: 240px;
+        min-width: 280px;
         padding: 16px 18px;
         border: 1px solid var(--border);
         border-radius: 18px;
@@ -98,7 +105,7 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       }
       .grid {
         display: grid;
-        grid-template-columns: 1.4fr 0.9fr;
+        grid-template-columns: 1.45fr 0.95fr;
         gap: 18px;
       }
       .panel {
@@ -162,6 +169,9 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         gap: 10px;
         margin-top: 18px;
       }
+      .profileActions {
+        margin-top: 10px;
+      }
       button {
         border: 1px solid transparent;
         border-radius: 999px;
@@ -174,6 +184,9 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       button.primary {
         background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 74%, #ffffff 14%));
         color: var(--accentText);
+      }
+      button.danger {
+        background: color-mix(in srgb, var(--vscode-errorForeground) 18%, transparent);
       }
       .status {
         border-radius: 18px;
@@ -237,7 +250,7 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         <div>
           <div class="eyebrow">Sonar Prompt Fixer</div>
           <h1>Connection Workspace</h1>
-          <p class="lead">Configure how the extension talks to SonarQube Cloud or Server, store your token securely, and validate access without leaving the editor.</p>
+          <p class="lead">Save multiple SonarQube Cloud and Server profiles, keep a token per profile, and switch the active connection without rewriting settings each time.</p>
         </div>
         <aside class="heroCard">
           <strong id="tokenHeadline">Token missing</strong>
@@ -248,11 +261,20 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       <section class="grid">
         <article class="panel">
           <div class="panelHeader">
-            <h2>Connection Settings</h2>
+            <h2>Connection Profiles</h2>
             <span class="badge" id="modeBadge">Cloud mode</span>
           </div>
           <div class="panelBody">
             <div class="fields">
+              <label class="full">
+                Editing profile
+                <select id="profileSelect"></select>
+                <span class="hint">Choose which saved profile you want to edit in this form.</span>
+              </label>
+              <label class="full">
+                Profile name
+                <input id="profileName" type="text" placeholder="Production Cloud" />
+              </label>
               <label>
                 Target type
                 <select id="connectionType">
@@ -299,11 +321,15 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
               <label class="full">
                 Token
                 <input id="token" type="password" placeholder="Stored securely in VS Code SecretStorage" />
-                <span class="hint">Edit or clear this password field, then click Save Settings.</span>
+                <span class="hint">Each saved profile can keep its own token. Clear the field and save to remove it.</span>
               </label>
             </div>
+            <div class="actions profileActions">
+              <button id="newProfile">New Profile</button>
+              <button class="danger" id="deleteProfile">Delete Profile</button>
+            </div>
             <div class="actions">
-              <button class="primary" id="saveConnection">Save Settings</button>
+              <button class="primary" id="saveProfile">Save Profile</button>
               <button id="testConnection">Test Connection</button>
             </div>
           </div>
@@ -324,9 +350,9 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
             </div>
             <div class="panelBody">
               <ul class="bulletList">
-                <li>Connection settings are stored in normal VS Code settings.</li>
-                <li>Your Sonar token is stored in VS Code SecretStorage.</li>
-                <li>Clearing the password field and saving removes the stored token.</li>
+                <li>Each profile stores its own Sonar connection details and can be made active instantly.</li>
+                <li>Tokens stay in VS Code SecretStorage instead of normal settings.</li>
+                <li>Profiles are the only connection source used by the extension.</li>
               </ul>
             </div>
           </section>
@@ -337,6 +363,8 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       const vscode = acquireVsCodeApi();
       const model = ${stateJson};
 
+      const profileSelect = document.getElementById('profileSelect');
+      const profileName = document.getElementById('profileName');
       const connectionType = document.getElementById('connectionType');
       const baseUrl = document.getElementById('baseUrl');
       const projectKey = document.getElementById('projectKey');
@@ -350,31 +378,31 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       const tokenHeadline = document.getElementById('tokenHeadline');
       const tokenSubline = document.getElementById('tokenSubline');
       const modeBadge = document.getElementById('modeBadge');
+      const deleteProfileButton = document.getElementById('deleteProfile');
+      let currentProfileId = '';
 
-      function render(data) {
-        connectionType.value = data.connection.type;
-        baseUrl.value = data.connection.baseUrl || '';
-        projectKey.value = data.connection.projectKey || '';
-        organization.value = data.connection.organization || '';
-        branch.value = data.connection.branch || '';
-        pullRequest.value = data.connection.pullRequest || '';
-        authMode.value = data.connection.authMode || 'bearer';
-        verifyTls.value = String(data.connection.verifyTls !== false);
-        token.value = data.token || '';
-        organization.disabled = data.connection.type !== 'cloud';
-        authMode.disabled = data.connection.type !== 'server';
-        status.className = 'status ' + data.statusKind;
-        status.textContent = data.statusMessage;
-        modeBadge.textContent = data.connection.type === 'cloud' ? 'Cloud mode' : 'Server mode';
-        tokenHeadline.textContent = data.hasToken ? 'Token stored' : 'Token missing';
-        tokenSubline.textContent = data.hasToken
-          ? 'You can edit the stored token directly in the password field.'
-          : 'Save a token in SecretStorage to start fetching issues.';
+      function makeBlankDraft() {
+        return {
+          id: '',
+          name: '',
+          connection: {
+            type: 'cloud',
+            baseUrl: 'https://sonarcloud.io',
+            projectKey: '',
+            organization: '',
+            branch: '',
+            pullRequest: '',
+            authMode: 'bearer',
+            verifyTls: true
+          },
+          token: ''
+        };
       }
 
-      document.getElementById('saveConnection').addEventListener('click', () => {
-        vscode.postMessage({
-          type: 'saveConfiguration',
+      function currentDraft() {
+        return {
+          id: currentProfileId,
+          name: profileName.value,
           connection: {
             type: connectionType.value,
             baseUrl: baseUrl.value,
@@ -386,11 +414,91 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
             verifyTls: verifyTls.value === 'true'
           },
           token: token.value
+        };
+      }
+
+      function syncForm(draft) {
+        currentProfileId = draft.id || '';
+        profileName.value = draft.name || '';
+        connectionType.value = draft.connection.type || 'cloud';
+        baseUrl.value = draft.connection.baseUrl || '';
+        projectKey.value = draft.connection.projectKey || '';
+        organization.value = draft.connection.organization || '';
+        branch.value = draft.connection.branch || '';
+        pullRequest.value = draft.connection.pullRequest || '';
+        authMode.value = draft.connection.authMode || 'bearer';
+        verifyTls.value = String(draft.connection.verifyTls !== false);
+        token.value = draft.token || '';
+        organization.disabled = connectionType.value !== 'cloud';
+        authMode.disabled = connectionType.value !== 'server';
+        modeBadge.textContent = connectionType.value === 'cloud' ? 'Cloud mode' : 'Server mode';
+        deleteProfileButton.disabled = !currentProfileId || currentProfileId === '__default__';
+      }
+
+      function renderProfileOptions(data) {
+        profileSelect.innerHTML = '';
+        data.profiles.forEach((profile) => {
+          const option = document.createElement('option');
+          option.value = profile.id;
+          option.textContent = profile.name;
+          profileSelect.appendChild(option);
+        });
+        profileSelect.value = data.activeProfile.id;
+      }
+
+      function render(data) {
+        renderProfileOptions(data);
+        syncForm({
+          id: data.activeProfile.id,
+          name: data.activeProfile.name,
+          connection: data.activeProfile.connection,
+          token: data.token || ''
+        });
+        status.className = 'status ' + data.statusKind;
+        status.textContent = data.statusMessage;
+        tokenHeadline.textContent = data.hasToken ? 'Token stored' : 'Token missing';
+        tokenSubline.textContent = data.hasToken
+          ? 'This active profile already has a token available for requests.'
+          : 'Save a token in SecretStorage to start fetching issues.';
+      }
+
+      document.getElementById('newProfile').addEventListener('click', () => {
+        syncForm(makeBlankDraft());
+        status.className = 'status info';
+        status.textContent = 'Drafting a new profile. Save it when you are ready.';
+      });
+
+      document.getElementById('saveProfile').addEventListener('click', () => {
+        const draft = currentDraft();
+        vscode.postMessage({
+          type: 'saveProfile',
+          profile: {
+            id: draft.id,
+            name: draft.name,
+            connection: draft.connection
+          },
+          token: draft.token
         });
       });
 
       document.getElementById('testConnection').addEventListener('click', () => {
-        vscode.postMessage({ type: 'testConnection' });
+        const draft = currentDraft();
+        vscode.postMessage({
+          type: 'testConnection',
+          connection: draft.connection,
+          token: draft.token
+        });
+      });
+
+      document.getElementById('deleteProfile').addEventListener('click', () => {
+        if (!currentProfileId || currentProfileId === '__default__') {
+          return;
+        }
+        vscode.postMessage({ type: 'deleteProfile', profileId: currentProfileId });
+      });
+
+      profileSelect.addEventListener('change', () => {
+        vscode.postMessage({ type: 'selectProfile', profileId: profileSelect.value });
       });
 
       connectionType.addEventListener('change', () => {

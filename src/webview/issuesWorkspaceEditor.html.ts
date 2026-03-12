@@ -155,14 +155,21 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
         max-width: 58px;
         padding-left: 10px;
         padding-right: 6px;
+        vertical-align: top;
       }
       td.selectCol input {
         display: block;
-        margin: 0 auto;
+        margin: 2px auto 0;
       }
       .tableWrap { max-height: calc(100vh - 360px); overflow-y: auto; overflow-x: hidden; }
       .panelBody { padding: 0; }
       .message { min-width: 320px; }
+      th.colSeverity, td.colSeverity { width: 92px; }
+      th.colType, td.colType { width: 118px; }
+      th.colStatus, td.colStatus { width: 92px; }
+      th.colRule, td.colRule { width: 132px; }
+      th.colLocation, td.colLocation { width: 180px; }
+      th.colProbability, td.colProbability { width: 110px; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
       .severity, .type, .probability {
         display: inline-block;
@@ -241,7 +248,14 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
       .stepNav button:disabled { opacity: 0.5; box-shadow: none; }
       .promptPanel { min-height: calc(100vh - 200px); display: flex; flex-direction: column; }
       .promptToolbar { justify-content: space-between; }
-      .promptActions { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+      .promptActions { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+      .promptActions label {
+        min-width: 180px;
+        margin: 0;
+      }
+      .promptActions button {
+        align-self: flex-end;
+      }
       .promptBox { position: relative; display: flex; flex-direction: column; min-height: 0; }
       .iconButton {
         width: 34px;
@@ -311,8 +325,6 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
             </div>
           </div>
           <div class="toolbar">
-            <button id="refresh">Refresh</button>
-            <button id="openConfig">Configuration</button>
             <button id="selectVisible">Select Visible</button>
             <button id="clearSelection">Clear Selection</button>
             <button id="clearFilters">Clear Filters</button>
@@ -643,16 +655,16 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
         }
 
         if (data.mode === 'hotspots') {
-          tableHead.innerHTML = '<tr><th class="selectCol">Select</th><th>Probability</th><th>Status</th><th>Location</th><th class="message">Message</th></tr>';
+          tableHead.innerHTML = '<tr><th class="selectCol">Select</th><th class="colProbability">Probability</th><th class="colStatus">Status</th><th class="colLocation">Location</th><th class="message">Message</th></tr>';
           for (const hotspot of data.hotspots) {
             const row = document.createElement('tr');
             const locationBase = toRelativeComponent(hotspot.component, data.projectKey);
             const location = hotspot.line ? locationBase + ':' + hotspot.line : locationBase;
             row.innerHTML = [
               '<td class="selectCol"><input type="checkbox" data-mode="hotspots" data-key="' + hotspot.key + '"' + (hotspot.selected ? ' checked' : '') + ' /></td>',
-              '<td><span class="probability">' + escapeHtml(hotspot.vulnerabilityProbability || 'UNKNOWN') + '</span></td>',
-              '<td>' + escapeHtml(hotspot.status || 'TO_REVIEW') + '</td>',
-              '<td class="mono wrap">' + escapeHtml(location) + '</td>',
+              '<td class="colProbability"><span class="probability">' + escapeHtml(hotspot.vulnerabilityProbability || 'UNKNOWN') + '</span></td>',
+              '<td class="colStatus wrap">' + escapeHtml(hotspot.status || 'TO_REVIEW') + '</td>',
+              '<td class="mono wrap colLocation">' + escapeHtml(location) + '</td>',
               '<td class="message wrap">' + escapeHtml(hotspot.message) + '</td>'
             ].join('');
             tableBody.appendChild(row);
@@ -662,18 +674,18 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
           return;
         }
 
-        tableHead.innerHTML = '<tr><th class="selectCol">Select</th><th>Severity</th><th>Type</th><th>Status</th><th>Rule</th><th>Location</th><th class="message">Message</th></tr>';
+        tableHead.innerHTML = '<tr><th class="selectCol">Select</th><th class="colSeverity">Severity</th><th class="colType">Type</th><th class="colStatus">Status</th><th class="colRule">Rule</th><th class="colLocation">Location</th><th class="message">Message</th></tr>';
         for (const issue of data.issues) {
           const row = document.createElement('tr');
           const locationBase = toRelativeComponent(issue.component, data.projectKey);
           const location = issue.line ? locationBase + ':' + issue.line : locationBase;
           row.innerHTML = [
             '<td class="selectCol"><input type="checkbox" data-mode="issues" data-key="' + issue.key + '"' + (issue.selected ? ' checked' : '') + ' /></td>',
-            '<td><span class="severity">' + issue.severity + '</span></td>',
-            '<td><span class="type">' + issue.type + '</span></td>',
-            '<td class="wrap">' + escapeHtml(issue.status || 'OPEN') + '</td>',
-            '<td class="mono wrap">' + escapeHtml(issue.rule) + '</td>',
-            '<td class="mono wrap">' + escapeHtml(location) + '</td>',
+            '<td class="colSeverity"><span class="severity">' + issue.severity + '</span></td>',
+            '<td class="colType"><span class="type">' + issue.type + '</span></td>',
+            '<td class="wrap colStatus">' + escapeHtml(issue.status || 'OPEN') + '</td>',
+            '<td class="mono wrap colRule">' + escapeHtml(issue.rule) + '</td>',
+            '<td class="mono wrap colLocation">' + escapeHtml(location) + '</td>',
             '<td class="message wrap">' + escapeHtml(issue.message) + '</td>'
           ].join('');
           tableBody.appendChild(row);
@@ -812,8 +824,6 @@ export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, mod
         }
       }
 
-      document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
-      document.getElementById('openConfig').addEventListener('click', () => vscode.postMessage({ type: 'openConfig' }));
       document.getElementById('selectVisible').addEventListener('click', () => vscode.postMessage({ type: 'selectVisible' }));
       document.getElementById('clearSelection').addEventListener('click', () => vscode.postMessage({ type: 'clearSelection' }));
       document.getElementById('clearFilters').addEventListener('click', () => vscode.postMessage({ type: 'clearFilters' }));

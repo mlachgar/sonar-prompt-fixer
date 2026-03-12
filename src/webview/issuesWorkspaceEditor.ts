@@ -16,7 +16,6 @@ import {
   SonarSecurityHotspot
 } from '../sonar/types';
 import { renderIssuesWorkspaceHtml } from './issuesWorkspaceEditor.html';
-import { ConfigurationEditor } from './configurationEditor';
 
 type WorkspaceMode = 'issues' | 'coverage' | 'duplication' | 'hotspots';
 type CoverageFilters = { componentQuery?: string };
@@ -36,10 +35,8 @@ type IssuesWorkspaceMessage =
   | { type: 'selectVisible' }
   | { type: 'clearSelection' }
   | { type: 'clearFilters' }
-  | { type: 'refresh' }
   | { type: 'generatePrompt' }
   | { type: 'copyPrompt' }
-  | { type: 'openConfig' }
   | { type: 'setPromptOptions'; target: PromptTarget; style: PromptStyle };
 
 export class IssuesWorkspaceEditor {
@@ -64,8 +61,7 @@ export class IssuesWorkspaceEditor {
     private readonly issuesProvider: SonarIssuesProvider,
     private readonly filterState: FilterState,
     private readonly selectionState: SelectionState,
-    private readonly connectionState: ConnectionState,
-    private readonly configurationEditor: ConfigurationEditor
+    private readonly connectionState: ConnectionState
   ) {
     const config = vscode.workspace.getConfiguration('sonarPromptFixer');
     this.target = config.get<PromptTarget>('prompt.defaultTarget', 'codex');
@@ -235,19 +231,11 @@ export class IssuesWorkspaceEditor {
       case 'clearFilters':
         this.clearFilters();
         break;
-      case 'refresh':
-        await this.issuesProvider.loadIssues();
-        await this.loadSupplementaryData();
-        this.update();
-        break;
       case 'generatePrompt':
         await this.generatePrompt();
         break;
       case 'copyPrompt':
         await this.copyPrompt();
-        break;
-      case 'openConfig':
-        await this.configurationEditor.open();
         break;
       case 'setPromptOptions':
         await this.setPromptOptions(message.target, message.style);
@@ -274,6 +262,7 @@ export class IssuesWorkspaceEditor {
     const issue = this.issuesProvider.getAllIssues().find((candidate) => candidate.key === issueKey);
     if (issue) {
       this.selectionState.toggle(issue);
+      this.update();
     }
   }
 
@@ -505,6 +494,7 @@ export class IssuesWorkspaceEditor {
       case 'issues':
       default:
         this.selectionState.selectMany(this.issuesProvider.getVisibleIssues());
+        this.update();
         break;
     }
   }
@@ -526,6 +516,7 @@ export class IssuesWorkspaceEditor {
       case 'issues':
       default:
         this.selectionState.clear();
+        this.update();
         break;
     }
   }

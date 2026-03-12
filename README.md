@@ -1,6 +1,6 @@
 # Sonar Prompt Fixer
 
-Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a self-hosted SonarQube Server, fetches project findings, and generates remediation prompts for coding agents such as Codex, Claude Code, and Qwen Code. The main workflow lives in a dedicated Sonar Workspace, while the sidebar provides a passive Findings tree.
+Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a self-hosted SonarQube Server, fetches project findings, and generates remediation prompts for coding agents such as Codex, Claude Code, and Qwen Code. The main workflow lives in a dedicated Sonar Workspace, while the sidebar provides a lightweight Findings summary.
 
 ## Features
 
@@ -10,7 +10,12 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
 - Automatic token fallback from `.env` when `SONAR_TOKEN` is present and no token is stored yet
 - One-time onboarding hint that points first-time users to the Activity Bar entry
 - Configuration editor opened from the Findings view
-- Passive Findings tree for all fetched items
+- Findings summary view with click-through entry points into each workspace mode
+- Findings sidebar webview with:
+  - profile selector
+  - refresh control
+  - loading state
+  - summary counts for each workspace mode
 - Sonar Workspace modes: `Issues`, `Coverage`, `Duplication`, `Security Hotspots`
 - KPI summary chips for coverage, duplication, and security review metrics
 - Canonical prompt builder with lightweight renderers for:
@@ -21,28 +26,24 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
 
 ## Configuration
 
-The extension stores connection settings in VS Code settings under `sonarPromptFixer.*`.
+The extension stores connection profiles in VS Code settings under `sonarPromptFixer.connections.*`.
 
 Key settings:
 
-- `sonarPromptFixer.connection.type`: `cloud` or `server`
-- `sonarPromptFixer.connection.baseUrl`
-- `sonarPromptFixer.connection.projectKey`
-- `sonarPromptFixer.connection.organization`
-- `sonarPromptFixer.connection.branch`
-- `sonarPromptFixer.connection.pullRequest`
-- `sonarPromptFixer.connection.verifyTls`
-- `sonarPromptFixer.connection.authMode`
+- `sonarPromptFixer.connections.profiles`
+- `sonarPromptFixer.connections.activeProfileId`
 - `sonarPromptFixer.groupBy`
 - `sonarPromptFixer.prompt.defaultTarget`
 - `sonarPromptFixer.prompt.defaultStyle`
 
-You can set these from the configuration editor opened from the `Findings` view. When the saved configuration is still empty, the extension also tries to prefill:
+You can manage profiles from the configuration editor opened from the `Findings` view. When no profile has been saved yet, the editor starts from these defaults:
 
 - `projectKey` from `sonar.projectKey` in `sonar-project.properties`
 - `organization` from `sonar.organization` in `sonar-project.properties`
 
-Explicit VS Code settings always win over file-based defaults.
+Saved profiles become the source of truth for Sonar connections.
+
+When a saved active profile is valid and has a token, the extension preloads findings on startup.
 
 ## Secure Token Storage
 
@@ -133,13 +134,14 @@ npm run test:coverage
 4. Press `F5` to launch the Extension Development Host.
 5. On first activation, the extension shows a one-time onboarding hint with shortcuts to configuration and the Sonar Workspace.
 6. In the new window, open the `Sonar Prompt Fixer` sidebar.
-7. In the `Findings` view, open the configuration editor.
+7. Use the profile selector in the `Findings` view or open the configuration editor from the view title.
 8. Review the prefilled values from `sonar-project.properties` and `.env` if those files exist.
-9. Save your settings and token, then test the connection from that editor.
-10. In the `Findings` view, click the workspace button to open the editor-based Sonar Workspace.
-11. Choose a mode: `Issues`, `Coverage`, `Duplication`, or `Security Hotspots`.
-12. Use step 1 to filter and select the relevant items.
-13. Move to step 2 to generate and copy the prompt.
+9. Save your profile and token, then test the connection from the configuration editor.
+10. Refresh the Findings sidebar if needed and confirm the summary counts load.
+11. Click a summary card or use the workspace button to open the editor-based Sonar Workspace.
+12. Choose a mode: `Issues`, `Coverage`, `Duplication`, or `Security Hotspots`.
+13. Use step 1 to filter and select the relevant items.
+14. Move to step 2 to generate and copy the prompt.
 
 ## How To Test
 
@@ -152,6 +154,7 @@ npm run test:coverage
 - Confirm empty configuration is prefilled from `sonar-project.properties` when available.
 - Confirm a stored token still takes precedence over `.env`.
 - Confirm the onboarding hint appears once on first activation and does not block startup.
+- Confirm findings preload on startup when the active profile is already valid.
 - In `Issues` mode, fetch issues and test local filtering by:
   - type
   - severity
@@ -178,8 +181,9 @@ npm run test:coverage
 - Confirm the tables show relative locations without unwanted horizontal scrolling.
 - Confirm the status combobox shows all status options cleanly.
 - Generate prompts in all four workspace modes for all three coding-agent targets and copy them from the prompt panel.
-- Confirm the Findings tree shows all fetched items, even when they are not selected in the workspace.
-- Confirm the Findings tree groups issues by severity and security hotspots by probability.
+- Confirm the Findings summary shows counts for each workspace mode and resets while refreshing.
+- Confirm the Findings profile selector switches profiles and reloads summary counts.
+- Confirm each Findings summary card opens the matching workspace mode.
 
 ## GitHub CI And SonarQube Cloud
 
@@ -213,8 +217,8 @@ Recommended coverage strategy for this codebase:
 - Issue, coverage, duplication, and hotspot fetching are currently single-page requests capped at 500 items.
 - Filtering is local and in-memory after fetch.
 - Rule metadata is fetched through the backend abstraction but is not yet surfaced in the UI.
-- The Findings tree is read-only and intentionally decoupled from workspace selection state.
-- Rich filtering, selection, and prompt actions live in the Sonar Workspace.
+- The Findings sidebar is intentionally summary-only; rich filtering, selection, and prompt actions live in the Sonar Workspace.
+- Some self-hosted SonarQube endpoints can fail independently because of permissions or edition capabilities; the sidebar degrades per section instead of failing entirely.
 - The webview is intentionally lightweight and does not use an external frontend framework.
 
 ## Architecture Overview
@@ -226,11 +230,11 @@ Recommended maintainable MVP layout:
 - `src/state`
   - connection, filter, and selection state
 - `src/providers`
-  - tree data provider for fetched findings
+  - Sonar data loading and normalization used by the sidebar summary and workspace
 - `src/prompt`
   - canonical prompt model and target-specific renderers
 - `src/webview`
-  - configuration editor panel and issues workspace editor
+  - configuration editor panel, Findings sidebar webview, and Sonar workspace editor
 - `src/commands`
   - lightweight entry-point command registration modules
 

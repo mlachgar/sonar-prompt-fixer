@@ -1,11 +1,14 @@
 import * as vscode from 'vscode';
 import { registerOpenConfigurationEditorCommand } from './commands/openConfigurationEditor';
 import { registerOpenIssuesWorkspaceCommand } from './commands/openIssuesWorkspace';
+import { createSonarBackend } from './sonar/SonarBackendFactory';
 import { SonarIssuesProvider } from './providers/SonarIssuesProvider';
 import { ConnectionState } from './state/ConnectionState';
 import { FilterState } from './state/FilterState';
 import { SelectionState } from './state/SelectionState';
+import { ConfigurationError } from './util/errors';
 import { ConfigurationEditor } from './webview/configurationEditor';
+import { FindingsSummaryView } from './webview/findingsSummaryView';
 import { IssuesWorkspaceEditor } from './webview/issuesWorkspaceEditor';
 
 const ONBOARDING_KEY = 'sonarPromptFixer.onboardingShown';
@@ -20,12 +23,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     issuesProvider,
     filterState,
     selectionState,
-    connectionState,
-    configurationEditor
+    connectionState
   );
+  const findingsSummaryView = new FindingsSummaryView(issuesProvider, connectionState, issuesWorkspaceEditor);
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('sonarPromptFixer.issues', issuesProvider)
+    vscode.window.registerWebviewViewProvider(FindingsSummaryView.viewType, findingsSummaryView)
   );
 
   registerOpenConfigurationEditorCommand(context, configurationEditor);
@@ -36,17 +39,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       issuesProvider.refresh();
       issuesWorkspaceEditor.update();
     }),
+    selectionState.onDidChange(() => {
+      issuesWorkspaceEditor.update();
+    }),
     connectionState.onDidChange(() => {
-      void issuesProvider.loadFindings();
+      void issuesProvider.reloadFindings();
       configurationEditor.update();
       issuesWorkspaceEditor.update();
+      findingsSummaryView.update();
     }),
     issuesProvider.onDidChangeIssues(() => {
       issuesWorkspaceEditor.update();
+      findingsSummaryView.update();
     })
   );
 
   void configurationEditor.initialize();
+  void preloadActiveProfileFindings(connectionState, issuesProvider, findingsSummaryView);
   queueOnboarding(context);
 }
 
@@ -77,4 +86,27 @@ async function showOnboardingIfNeeded(context: vscode.ExtensionContext): Promise
   if (action === 'Open Sonar Workspace') {
     await vscode.commands.executeCommand('sonarPromptFixer.openIssuesWorkspace');
   }
+}
+
+async function preloadActiveProfileFindings(
+  connectionState: ConnectionState,
+  issuesProvider: SonarIssuesProvider,
+  findingsSummaryView: FindingsSummaryView
+): Promise<void> {
+  const activeProfile = connectionState.getActiveProfile();
+  if (activeProfile.id === '__default__') {
+    return;
+  }
+
+  try {
+    createSonarBackend(connectionState.getConnection(), await connectionState.getToken());
+  } catch (error) {
+    if (!(error instanceof ConfigurationError)) {
+      console.warn('Sonar Prompt Fixer startup preload skipped:', error);
+    }
+    return;
+  }
+
+  findingsSummaryView.update();
+  void issuesProvider.loadFindings();
 }

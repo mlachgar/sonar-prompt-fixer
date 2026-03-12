@@ -1,19 +1,22 @@
 import * as vscode from 'vscode';
 import { createSonarBackend } from '../sonar/SonarBackendFactory';
-import { SonarConnection } from '../sonar/types';
+import { SonarConnection, SonarConnectionProfile } from '../sonar/types';
 import { ConnectionState } from '../state/ConnectionState';
 import { ConfigurationError } from '../util/errors';
-import { deleteToken, storeToken } from '../util/secrets';
 import { renderConfigurationEditorHtml } from './configurationEditor.html';
 
+type EditableProfile = Partial<SonarConnectionProfile> & { connection: SonarConnection };
+
 type ConfigurationMessage =
-  | { type: 'saveConfiguration'; connection: SonarConnection; token: string }
-  | { type: 'testConnection' };
+  | { type: 'saveProfile'; profile: EditableProfile; token: string }
+  | { type: 'selectProfile'; profileId: string }
+  | { type: 'deleteProfile'; profileId: string }
+  | { type: 'testConnection'; connection: SonarConnection; token: string };
 
 export class ConfigurationEditor {
   private panel?: vscode.WebviewPanel;
   private token = '';
-  private statusMessage = 'Save your Sonar settings and token, then test the connection.';
+  private statusMessage = 'Save a Sonar profile and token, then test the connection.';
   private statusKind: 'info' | 'success' | 'error' = 'info';
 
   public constructor(
@@ -48,13 +51,23 @@ export class ConfigurationEditor {
     });
 
     this.panel.webview.onDidReceiveMessage(async (message: ConfigurationMessage) => {
-      if (message.type === 'saveConfiguration') {
-        await this.saveConfiguration(message.connection, message.token);
+      if (message.type === 'saveProfile') {
+        await this.saveProfile(message.profile, message.token);
+        return;
+      }
+
+      if (message.type === 'selectProfile') {
+        await this.selectProfile(message.profileId);
+        return;
+      }
+
+      if (message.type === 'deleteProfile') {
+        await this.deleteProfile(message.profileId);
         return;
       }
 
       if (message.type === 'testConnection') {
-        await this.testConnection();
+        await this.testConnection(message.connection, message.token);
       }
     });
 
@@ -73,8 +86,16 @@ export class ConfigurationEditor {
 
     await this.refreshToken();
 
+    const activeProfile = this.connectionState.getActiveProfile();
     const payload = {
-      connection: this.connectionState.getConnection(),
+      profiles: this.connectionState.getProfiles().map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        type: profile.connection.type,
+        baseUrl: profile.connection.baseUrl,
+        projectKey: profile.connection.projectKey
+      })),
+      activeProfile,
       hasToken: this.token.length > 0,
       token: this.token,
       statusMessage: this.statusMessage,
@@ -85,40 +106,52 @@ export class ConfigurationEditor {
     this.panel.webview.postMessage(payload).then(undefined, () => undefined);
   }
 
-  private async saveConfiguration(connection: SonarConnection, token: string): Promise<void> {
+  private async saveProfile(profile: EditableProfile, token: string): Promise<void> {
     try {
-      await this.connectionState.updateConnection({
+      const savedProfile = await this.connectionState.saveProfile(profile, token);
+      this.token = token.trim();
+      this.statusMessage = `Saved profile "${savedProfile.name}".`;
+      this.statusKind = 'success';
+      this.update();
+    } catch (error) {
+      this.statusMessage = error instanceof Error ? error.message : 'Failed to save Sonar profile.';
+      this.statusKind = 'error';
+      this.update();
+    }
+  }
+
+  private async selectProfile(profileId: string): Promise<void> {
+    await this.connectionState.selectProfile(profileId);
+    await this.refreshToken();
+    this.statusMessage = `Active profile switched to "${this.connectionState.getActiveProfile().name}".`;
+    this.statusKind = 'info';
+    this.update();
+  }
+
+  private async deleteProfile(profileId: string): Promise<void> {
+    const profile = this.connectionState.getProfiles().find((item) => item.id === profileId);
+    if (!profile || profile.id === '__default__') {
+      return;
+    }
+
+    await this.connectionState.deleteProfile(profileId);
+    await this.refreshToken();
+    this.statusMessage = `Deleted profile "${profile.name}".`;
+    this.statusKind = 'success';
+    this.update();
+  }
+
+  private async testConnection(connection: SonarConnection, token: string): Promise<void> {
+    try {
+      const trimmedToken = token.trim();
+      const backend = createSonarBackend({
         ...connection,
         baseUrl: connection.baseUrl.trim(),
         projectKey: connection.projectKey.trim(),
         organization: connection.organization?.trim() || undefined,
         branch: connection.branch?.trim() || undefined,
         pullRequest: connection.pullRequest?.trim() || undefined
-      });
-
-      const trimmedToken = token.trim();
-      if (trimmedToken === '') {
-        await deleteToken(this.context.secrets);
-        this.token = '';
-        this.statusMessage = 'Connection settings saved and stored token cleared.';
-      } else {
-        await storeToken(this.context.secrets, trimmedToken);
-        this.token = trimmedToken;
-        this.statusMessage = 'Connection settings and token saved.';
-      }
-
-      this.statusKind = 'success';
-      this.update();
-    } catch (error) {
-      this.statusMessage = error instanceof Error ? error.message : 'Failed to save connection settings.';
-      this.statusKind = 'error';
-      this.update();
-    }
-  }
-
-  private async testConnection(): Promise<void> {
-    try {
-      const backend = createSonarBackend(this.connectionState.getConnection(), await this.connectionState.getToken());
+      }, trimmedToken || undefined);
       const result = await backend.testConnection();
       this.statusMessage = result.details ? `${result.message} ${result.details}` : result.message;
       this.statusKind = result.ok ? 'success' : 'error';

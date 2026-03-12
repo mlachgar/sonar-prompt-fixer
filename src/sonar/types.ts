@@ -57,6 +57,12 @@ export type SonarConnection = {
   authMode?: 'bearer' | 'basicToken';
 };
 
+export type SonarConnectionProfile = {
+  id: string;
+  name: string;
+  connection: SonarConnection;
+};
+
 export type IssueFilters = {
   types: SonarIssueType[];
   severities: SonarSeverity[];

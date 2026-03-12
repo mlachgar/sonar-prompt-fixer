@@ -23,6 +23,7 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
   private coverageTargets: SonarCoverageTarget[] = [];
   private duplicationTargets: SonarDuplicationTarget[] = [];
   private hotspots: SonarSecurityHotspot[] = [];
+  private lastLoadWarnings: string[] = [];
   private hasLoadedFindings = false;
   private loadingFindings?: Promise<void>;
 
@@ -58,7 +59,39 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
     return [...this.issues];
   }
 
+  public getCoverageTargets(): SonarCoverageTarget[] {
+    return [...this.coverageTargets];
+  }
+
+  public getDuplicationTargets(): SonarDuplicationTarget[] {
+    return [...this.duplicationTargets];
+  }
+
+  public getHotspots(): SonarSecurityHotspot[] {
+    return [...this.hotspots];
+  }
+
+  public isLoading(): boolean {
+    return this.loadingFindings !== undefined;
+  }
+
+  public getLastLoadWarnings(): string[] {
+    return [...this.lastLoadWarnings];
+  }
+
   public async loadIssues(): Promise<void> {
+    return this.loadFindings();
+  }
+
+  public async reloadFindings(): Promise<void> {
+    if (this.loadingFindings) {
+      await this.loadingFindings;
+    }
+
+    this.resetFindings();
+    this.hasLoadedFindings = false;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+    this.onDidChangeIssuesEmitter.fire();
     return this.loadFindings();
   }
 
@@ -70,26 +103,33 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
     this.loadingFindings = (async () => {
       try {
         const backend = createSonarBackend(this.connectionState.getConnection(), await this.connectionState.getToken());
-        const [issues, coverageTargets, duplicationTargets, hotspots] = await Promise.all([
+        const [issuesResult, coverageResult, duplicationResult, hotspotsResult] = await Promise.allSettled([
           backend.getIssues(this.filterState.getFilters()),
           backend.getCoverageTargets(),
           backend.getDuplicationTargets(),
           backend.getSecurityHotspots()
         ]);
-        this.issues = issues;
-        this.coverageTargets = coverageTargets;
-        this.duplicationTargets = duplicationTargets;
-        this.hotspots = hotspots;
+
+        this.lastLoadWarnings = [];
+        this.issues = unwrapResult(issuesResult, 'Issues', this.lastLoadWarnings);
+        this.coverageTargets = unwrapResult(coverageResult, 'Coverage', this.lastLoadWarnings);
+        this.duplicationTargets = unwrapResult(duplicationResult, 'Duplication', this.lastLoadWarnings);
+        this.hotspots = unwrapResult(hotspotsResult, 'Security Hotspots', this.lastLoadWarnings);
         this.selectionState.setKnownIssues(this.issues);
         this.visibleIssues = this.filterState.apply(this.issues);
+
+        for (const warning of this.lastLoadWarnings) {
+          void vscode.window.showWarningMessage(warning);
+        }
       } catch (error) {
         this.issues = [];
         this.coverageTargets = [];
         this.duplicationTargets = [];
         this.hotspots = [];
         this.visibleIssues = [];
+        this.lastLoadWarnings = [];
         if (!(error instanceof ConfigurationError)) {
-          await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to load Sonar findings.');
+          void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to load Sonar findings.');
         }
       } finally {
         this.hasLoadedFindings = true;
@@ -102,10 +142,22 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
     return this.loadingFindings;
   }
 
+  private resetFindings(): void {
+    this.issues = [];
+    this.visibleIssues = [];
+    this.coverageTargets = [];
+    this.duplicationTargets = [];
+    this.hotspots = [];
+    this.lastLoadWarnings = [];
+    this.selectionState.setKnownIssues([]);
+  }
+
   private async getRootItems(): Promise<IssueTreeItem[]> {
     if (!this.hasLoadedFindings) {
       await this.loadFindings();
     }
+
+    const rootItems: IssueTreeItem[] = [];
 
     if (
       this.issues.length === 0 &&
@@ -113,10 +165,9 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
       this.duplicationTargets.length === 0 &&
       this.hotspots.length === 0
     ) {
-      return [new IssueTreeItem('empty', 'No findings to display', vscode.TreeItemCollapsibleState.None, undefined, [])];
+      rootItems.push(new IssueTreeItem('empty', 'No findings to display', vscode.TreeItemCollapsibleState.None, undefined, []));
+      return rootItems;
     }
-
-    const rootItems: IssueTreeItem[] = [];
 
     if (this.issues.length > 0) {
       rootItems.push(new IssueTreeItem('issuesGroup', `Issues (${this.issues.length})`, vscode.TreeItemCollapsibleState.Collapsed));
@@ -210,6 +261,20 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
         return new IssueTreeItem('hotspot', hotspot.message, vscode.TreeItemCollapsibleState.None, undefined, [], location);
       });
   }
+}
+
+function unwrapResult<T>(
+  result: PromiseSettledResult<T>,
+  label: string,
+  warnings: string[]
+): T extends Array<infer _Item> ? T : T {
+  if (result.status === 'fulfilled') {
+    return result.value as T extends Array<infer _Item> ? T : T;
+  }
+
+  const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+  warnings.push(`${label} could not be loaded: ${message}`);
+  return [] as T extends Array<infer _Item> ? T : T;
 }
 
 class IssueTreeItem extends vscode.TreeItem {

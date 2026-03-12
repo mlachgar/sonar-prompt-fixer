@@ -30,6 +30,7 @@
       "sonarPromptFixer": [
         {
           "id": "sonarPromptFixer.issues",
+          "type": "webview",
           "name": "Findings",
           "icon": "media/sonar.svg"
         }
@@ -64,54 +65,6 @@
     "configuration": {
       "title": "Sonar Prompt Fixer",
       "properties": {
-        "sonarPromptFixer.connection.type": {
-          "type": "string",
-          "enum": [
-            "cloud",
-            "server"
-          ],
-          "default": "cloud",
-          "description": "Choose whether to connect to SonarQube Cloud or a self-hosted SonarQube Server."
-        },
-        "sonarPromptFixer.connection.baseUrl": {
-          "type": "string",
-          "default": "https://sonarcloud.io",
-          "description": "Base URL for the Sonar instance, for example https://sonarcloud.io or https://sonarqube.example.com."
-        },
-        "sonarPromptFixer.connection.projectKey": {
-          "type": "string",
-          "default": "",
-          "description": "Sonar project key to query."
-        },
-        "sonarPromptFixer.connection.organization": {
-          "type": "string",
-          "default": "",
-          "description": "Organization key, mainly required for SonarQube Cloud."
-        },
-        "sonarPromptFixer.connection.branch": {
-          "type": "string",
-          "default": "",
-          "description": "Optional branch name to query."
-        },
-        "sonarPromptFixer.connection.pullRequest": {
-          "type": "string",
-          "default": "",
-          "description": "Optional pull request identifier to query."
-        },
-        "sonarPromptFixer.connection.verifyTls": {
-          "type": "boolean",
-          "default": true,
-          "description": "Verify TLS certificates when calling Sonar APIs."
-        },
-        "sonarPromptFixer.connection.authMode": {
-          "type": "string",
-          "enum": [
-            "bearer",
-            "basicToken"
-          ],
-          "default": "bearer",
-          "description": "Authentication mode for self-hosted SonarQube Server."
-        },
         "sonarPromptFixer.groupBy": {
           "type": "string",
           "enum": [
@@ -140,6 +93,74 @@
           ],
           "default": "balanced",
           "description": "Default prompt style."
+        },
+        "sonarPromptFixer.connections.activeProfileId": {
+          "type": "string",
+          "default": "",
+          "description": "Active saved Sonar connection profile id."
+        },
+        "sonarPromptFixer.connections.profiles": {
+          "type": "array",
+          "default": [],
+          "description": "Saved Sonar connection profiles managed by the configuration editor.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "connection"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "connection": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "baseUrl",
+                  "projectKey"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "cloud",
+                      "server"
+                    ]
+                  },
+                  "baseUrl": {
+                    "type": "string"
+                  },
+                  "projectKey": {
+                    "type": "string"
+                  },
+                  "organization": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "type": "string"
+                  },
+                  "pullRequest": {
+                    "type": "string"
+                  },
+                  "verifyTls": {
+                    "type": "boolean"
+                  },
+                  "authMode": {
+                    "type": "string",
+                    "enum": [
+                      "bearer",
+                      "basicToken"
+                    ]
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
