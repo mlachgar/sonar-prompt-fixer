@@ -165,6 +165,72 @@ afterEach(() => {
 });
 
 describe('ConnectionState', () => {
+  it('falls back to the default profile when stored configuration is malformed', () => {
+    setWorkspaceFolders(undefined);
+    setConfiguration({
+      'connections.activeProfileId': 'missing',
+      'connections.profiles': [
+        null,
+        'invalid',
+        {
+          id: ' ',
+          name: 'Broken',
+          connection: {
+            type: 'cloud',
+            baseUrl: 'https://sonarcloud.io',
+            projectKey: 'broken'
+          }
+        },
+        {
+          id: 'bad-type',
+          name: 'Broken 2',
+          connection: {
+            type: 'desktop',
+            baseUrl: 'https://sonar.example.com',
+            projectKey: 'broken'
+          }
+        }
+      ]
+    });
+
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-empty-default-'));
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath } as never);
+
+    expect(state.getProfiles()).toEqual([{
+      id: '__default__',
+      name: 'New Connection',
+      connection: {
+        type: 'cloud',
+        baseUrl: 'https://sonarcloud.io',
+        projectKey: '',
+        organization: undefined,
+        branch: undefined,
+        pullRequest: undefined,
+        verifyTls: true,
+        authMode: 'bearer'
+      }
+    }]);
+    expect(state.getActiveProfileId()).toBe('__default__');
+
+    fs.rmSync(extensionPath, { recursive: true, force: true });
+  });
+
+  it('ignores non-array stored profile settings', () => {
+    setWorkspaceFolders(undefined);
+    setConfiguration({
+      'connections.activeProfileId': 'missing',
+      'connections.profiles': 'not-an-array'
+    });
+
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-invalid-profiles-'));
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath } as never);
+
+    expect(state.getProfiles()).toHaveLength(1);
+    expect(state.getActiveProfileId()).toBe('__default__');
+
+    fs.rmSync(extensionPath, { recursive: true, force: true });
+  });
+
   it('reads the active saved profile and loads its stored token', async () => {
     setWorkspaceFolders(undefined);
     setConfiguration({
@@ -201,6 +267,104 @@ describe('ConnectionState', () => {
       authMode: 'basicToken'
     });
     await expect(state.getToken()).resolves.toBe('secret-token');
+  });
+
+  it('sanitizes saved profiles, infers missing names, and falls back to the first valid profile', () => {
+    setConfiguration({
+      'connections.activeProfileId': 'missing-profile',
+      'connections.profiles': [
+        {
+          id: 'cloud-profile',
+          name: ' ',
+          connection: {
+            type: 'cloud',
+            baseUrl: ' https://sonarcloud.io ',
+            projectKey: ' app-key ',
+            organization: ' ',
+            branch: ' ',
+            pullRequest: ' ',
+            verifyTls: 'invalid',
+            authMode: 'invalid'
+          }
+        },
+        {
+          id: 'server-profile',
+          name: 'Server',
+          connection: {
+            type: 'server',
+            baseUrl: ' https://sonar.example.com ',
+            projectKey: ' srv ',
+            organization: ' team ',
+            branch: ' main ',
+            pullRequest: ' 42 ',
+            verifyTls: false,
+            authMode: 'basicToken'
+          }
+        }
+      ]
+    });
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
+
+    expect(state.getProfiles()).toEqual([
+      {
+        id: 'cloud-profile',
+        name: 'app-key (Cloud)',
+        connection: {
+          type: 'cloud',
+          baseUrl: 'https://sonarcloud.io',
+          projectKey: 'app-key',
+          organization: undefined,
+          branch: undefined,
+          pullRequest: undefined,
+          verifyTls: true,
+          authMode: 'bearer'
+        }
+      },
+      {
+        id: 'server-profile',
+        name: 'Server',
+        connection: {
+          type: 'server',
+          baseUrl: 'https://sonar.example.com',
+          projectKey: 'srv',
+          organization: 'team',
+          branch: 'main',
+          pullRequest: '42',
+          verifyTls: false,
+          authMode: 'basicToken'
+        }
+      }
+    ]);
+    expect(state.getActiveProfileId()).toBe('cloud-profile');
+    expect(state.getActiveProfile().id).toBe('cloud-profile');
+  });
+
+  it('drops profiles whose connection value is not an object', () => {
+    setConfiguration({
+      'connections.activeProfileId': 'valid',
+      'connections.profiles': [
+        {
+          id: 'invalid-connection',
+          name: 'Invalid',
+          connection: 'server'
+        },
+        {
+          id: 'valid',
+          name: 'Valid',
+          connection: {
+            type: 'cloud',
+            baseUrl: 'https://sonarcloud.io',
+            projectKey: 'proj'
+          }
+        }
+      ]
+    });
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
+
+    expect(state.getProfiles()).toHaveLength(1);
+    expect(state.getActiveProfile().id).toBe('valid');
   });
 
   it('prefills the default profile from sonar-project.properties when no profile is saved', () => {
@@ -310,6 +474,59 @@ describe('ConnectionState', () => {
     expect(onDidChange).toHaveBeenCalledTimes(3);
   });
 
+  it('updates an existing profile in place and supports explicit profile token lookup', async () => {
+    setConfiguration({
+      'connections.activeProfileId': 'existing',
+      'connections.profiles': [
+        {
+          id: 'existing',
+          name: 'Existing',
+          connection: {
+            type: 'server',
+            baseUrl: 'https://old.example.com',
+            projectKey: 'old-key'
+          }
+        }
+      ]
+    });
+    const secrets = createSecretStorage({
+      'sonarPromptFixer.token.existing': 'updated-token'
+    });
+    const state = new ConnectionState({ secrets, extensionPath: '/extension' } as never);
+
+    const savedProfile = await state.saveProfile({
+      id: ' existing ',
+      name: undefined,
+      connection: {
+        type: 'server',
+        baseUrl: ' https://new.example.com ',
+        projectKey: 'proj-two',
+        organization: ' org ',
+        branch: ' feature ',
+        pullRequest: ' 99 ',
+        verifyTls: false,
+        authMode: 'basicToken'
+      }
+    }, '  updated-token  ');
+
+    expect(savedProfile).toEqual({
+      id: 'existing',
+      name: 'proj-two (Server)',
+      connection: {
+        type: 'server',
+        baseUrl: 'https://new.example.com',
+        projectKey: 'proj-two',
+        organization: 'org',
+        branch: 'feature',
+        pullRequest: '99',
+        verifyTls: false,
+        authMode: 'basicToken'
+      }
+    });
+    expect(state.getProfiles()).toHaveLength(1);
+    await expect(state.getToken('existing')).resolves.toBe('updated-token');
+  });
+
   it('falls back to default values when optional profile connection fields are omitted', async () => {
     const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
 
@@ -373,6 +590,33 @@ describe('ConnectionState', () => {
     expect(state.getActiveProfile().id).toBe('first');
     expect(state.getConnection().projectKey).toBe('one');
     await expect(state.getToken()).resolves.toBe('one-token');
+  });
+
+  it('ignores unknown profile ids when selecting or deleting', async () => {
+    setConfiguration({
+      'connections.activeProfileId': 'first',
+      'connections.profiles': [
+        {
+          id: 'first',
+          name: 'First',
+          connection: {
+            type: 'cloud',
+            baseUrl: 'https://sonarcloud.io',
+            projectKey: 'one'
+          }
+        }
+      ]
+    });
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
+    const onDidChange = vi.fn();
+    state.onDidChange(onDidChange);
+
+    await state.selectProfile('missing');
+    await state.deleteProfile('missing');
+
+    expect(state.getActiveProfile().id).toBe('first');
+    expect(getUpdateCalls()).toEqual([]);
+    expect(onDidChange).not.toHaveBeenCalled();
   });
 
   it('falls back to SONAR_TOKEN from .env when secret storage is empty', async () => {

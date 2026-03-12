@@ -202,7 +202,12 @@ function sanitizeConnection(rawConnection: unknown): SonarConnection | undefined
   }
 
   const candidate = rawConnection as Record<string, unknown>;
-  const type = candidate.type === 'server' ? 'server' : candidate.type === 'cloud' ? 'cloud' : undefined;
+  let type: SonarConnection['type'] | undefined;
+  if (candidate.type === 'server') {
+    type = 'server';
+  } else if (candidate.type === 'cloud') {
+    type = 'cloud';
+  }
   const baseUrl = typeof candidate.baseUrl === 'string' ? candidate.baseUrl.trim() : '';
   const projectKey = typeof candidate.projectKey === 'string' ? candidate.projectKey.trim() : '';
   const organization = typeof candidate.organization === 'string' ? candidate.organization.trim() : '';

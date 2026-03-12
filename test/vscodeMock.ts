@@ -16,7 +16,7 @@ class MockEventEmitter<T> {
   };
 
   public fire(event: T): void {
-    for (const listener of [...this.listeners]) {
+    for (const listener of this.listeners) {
       listener(event);
     }
   }
@@ -49,8 +49,6 @@ type UpdateCall = {
 const configurationValues = new Map<string, unknown>();
 const updateCalls: UpdateCall[] = [];
 const shownErrors: string[] = [];
-const shownInfos: string[] = [];
-const shownWarnings: string[] = [];
 let workspaceFolders: Array<{ uri: { fsPath: string } }> | undefined = [
   { uri: { fsPath: process.cwd() } }
 ];
@@ -82,12 +80,8 @@ export const window = {
   async showErrorMessage(message: string): Promise<void> {
     shownErrors.push(message);
   },
-  async showInformationMessage(message: string): Promise<void> {
-    shownInfos.push(message);
-  },
-  async showWarningMessage(message: string): Promise<void> {
-    shownWarnings.push(message);
-  }
+  async showInformationMessage(_message: string): Promise<void> {},
+  async showWarningMessage(_message: string): Promise<void> {}
 };
 
 export function createSecretStorage(initial: Record<string, string> = {}) {
@@ -109,8 +103,6 @@ export function resetVscodeMock(): void {
   configurationValues.clear();
   updateCalls.length = 0;
   shownErrors.length = 0;
-  shownInfos.length = 0;
-  shownWarnings.length = 0;
   workspaceFolders = [{ uri: { fsPath: process.cwd() } }];
 }
 

@@ -51,7 +51,17 @@ Then:
 2. Complete the initial SonarQube setup
 3. Create a project manually
 4. Generate a user token
-5. Configure the extension profile with:
+5. Run a local scan to populate the project:
+
+```bash
+sonar-scanner \
+  -Dsonar.host.url=http://localhost:9000 \
+  -Dsonar.token=YOUR_USER_TOKEN \
+  -Dsonar.projectKey=YOUR_PROJECT_KEY \
+  -Dsonar.sources=.
+```
+
+6. Configure the extension profile with:
    - `type = server`
    - `baseUrl = http://localhost:9000`
    - `projectKey = <your-project-key>`

@@ -186,11 +186,11 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
   }
 
   public async getChildrenForGroup(element: IssueTreeItem): Promise<IssueTreeItem[]> {
-    switch (element.kind) {
+      switch (element.kind) {
       case 'issuesGroup':
         return this.getIssueSeverityGroups();
       case 'issueSeverityGroup':
-        return this.getIssueItems(element.label?.toString());
+        return this.getIssueItems(element.itemLabel);
       case 'coverageGroup':
         return this.coverageTargets.map((target) => {
           const description = `${formatPercent(target.coverage)} coverage`;
@@ -204,7 +204,7 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
       case 'hotspotsGroup':
         return this.getHotspotProbabilityGroups();
       case 'hotspotProbabilityGroup':
-        return this.getHotspotItems(element.label?.toString());
+        return this.getHotspotItems(element.itemLabel);
       case 'issue':
       case 'coverage':
       case 'duplication':
@@ -280,13 +280,13 @@ function unwrapResult<T>(
 class IssueTreeItem extends vscode.TreeItem {
   public constructor(
     public readonly kind: 'issuesGroup' | 'issueSeverityGroup' | 'coverageGroup' | 'duplicationGroup' | 'hotspotsGroup' | 'hotspotProbabilityGroup' | 'issue' | 'coverage' | 'duplication' | 'hotspot' | 'empty',
-    label: string,
+    public readonly itemLabel: string,
     collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly issue?: SonarIssue,
     public readonly issues: SonarIssue[] = [],
     description?: string
   ) {
-    super(label, collapsibleState);
+    super(itemLabel, collapsibleState);
     this.contextValue = getContextValue(kind);
     this.description = description;
     if (
