@@ -148,12 +148,16 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
-    "lint": "tsc -p ./ --noEmit"
+    "lint": "tsc -p ./ --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "@types/node": "^22.10.1",
     "@types/vscode": "^1.96.0",
     "typescript": "^5.7.2",
+    "vitest": "^3.2.4",
     "vsce": "^2.15.0"
   }
 }

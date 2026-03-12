@@ -64,7 +64,7 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
       this.issues = [];
       this.visibleIssues = [];
       if (!(error instanceof ConfigurationError)) {
-        void vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to load Sonar issues.');
+        await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Failed to load Sonar issues.');
       }
     } finally {
       this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -110,11 +110,7 @@ class IssueTreeItem extends vscode.TreeItem {
     groupLabel?: string
   ) {
     super(label, collapsibleState);
-    this.contextValue =
-      kind === 'group' ? 'sonarGroup' :
-      kind === 'openWorkspace' ? 'sonarOpenWorkspace' :
-      kind === 'summary' ? 'sonarSummary' :
-      'sonarEmpty';
+    this.contextValue = getContextValue(kind);
     if (kind === 'group') {
       this.description = `${issues.filter((candidate) => candidate.status !== 'RESOLVED').length} active`;
       this.command = {
@@ -134,4 +130,20 @@ class IssueTreeItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('info');
     }
   }
+}
+
+function getContextValue(kind: IssueTreeItem['kind']): string {
+  if (kind === 'group') {
+    return 'sonarGroup';
+  }
+
+  if (kind === 'openWorkspace') {
+    return 'sonarOpenWorkspace';
+  }
+
+  if (kind === 'summary') {
+    return 'sonarSummary';
+  }
+
+  return 'sonarEmpty';
 }

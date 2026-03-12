@@ -73,6 +73,7 @@ export class SonarQubeServerBackend implements SonarBackend {
       componentKeys: this.connection.projectKey,
       branch: this.connection.branch,
       pullRequest: this.connection.pullRequest,
+      statuses: 'OPEN,CONFIRMED,REOPENED',
       ps: 500
     });
 

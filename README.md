@@ -90,6 +90,12 @@ npm install
 npm run compile
 ```
 
+Optional but recommended quality checks:
+
+```bash
+npm run test:coverage
+```
+
 3. Open this folder in VS Code.
 4. Press `F5` to launch the Extension Development Host.
 5. In the new window, open the `Sonar Prompt Fixer` sidebar.
@@ -118,6 +124,29 @@ npm run compile
 - Confirm the status combobox shows all status options cleanly.
 - Generate prompts for all three targets directly in the Issues Workspace and copy them from the prompt panel.
 
+## GitHub CI And SonarQube Cloud
+
+The repository includes a GitHub Actions workflow at [`.github/workflows/ci.yml`](/Users/mohamedlachgar/Dev/Git/sonar-prompt-fixer/.github/workflows/ci.yml) and a shared Sonar configuration at [`sonar-project.properties`](/Users/mohamedlachgar/Dev/Git/sonar-prompt-fixer/sonar-project.properties).
+
+Before the scan can run successfully, configure these GitHub repository settings:
+
+- Secret: `SONAR_TOKEN`
+- Variable: `SONAR_ORGANIZATION`
+- Variable: `SONAR_PROJECT_KEY`
+
+The workflow currently:
+
+- installs dependencies with `npm ci`
+- compiles the extension with `npm run compile`
+- runs unit tests with coverage via `npm run test:coverage`
+- runs a SonarQube Cloud scan on push, pull request, and manual dispatch
+
+Recommended coverage strategy for this codebase:
+
+- keep UI code in Sonar analysis
+- exclude VS Code integration layers and webview template files from coverage until they have stable tests
+- keep core logic such as prompt rendering, Sonar mapping, and state/filter logic in coverage scope
+
 ## Known Limitations
 
 - Issue fetching is currently a single-page request capped at 500 issues.
@@ -126,6 +155,7 @@ npm run compile
 - The tree currently groups by one setting at a time: severity or type.
 - The sidebar is intentionally lightweight; rich issue filtering and prompt actions live in the Issues Workspace.
 - The webview is intentionally lightweight and does not use an external frontend framework.
+- CI expects GitHub repository variables for SonarQube Cloud project identification.
 
 ## Architecture Overview
 

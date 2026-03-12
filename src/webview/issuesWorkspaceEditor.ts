@@ -60,73 +60,7 @@ export class IssuesWorkspaceEditor {
     });
 
     this.panel.webview.onDidReceiveMessage(async (message: IssuesWorkspaceMessage) => {
-      if (message.type === 'setFilters') {
-        this.filterState.setFilters({
-          types: message.filters.types as IssueFilters['types'],
-          severities: message.filters.severities as IssueFilters['severities'],
-          statuses: message.filters.statuses,
-          ruleQuery: message.filters.ruleQuery?.trim() || undefined,
-          componentQuery: message.filters.componentQuery?.trim() || undefined
-        });
-        return;
-      }
-
-      if (message.type === 'toggleIssue' && message.key) {
-        const issue = this.issuesProvider.getAllIssues().find((candidate) => candidate.key === message.key);
-        if (issue) {
-          this.selectionState.toggle(issue);
-        }
-        return;
-      }
-
-      if (message.type === 'selectVisible') {
-        this.selectionState.selectMany(this.issuesProvider.getVisibleIssues());
-        return;
-      }
-
-      if (message.type === 'clearSelection') {
-        this.selectionState.clear();
-        return;
-      }
-
-      if (message.type === 'clearFilters') {
-        this.filterState.clear();
-        return;
-      }
-
-      if (message.type === 'refresh') {
-        await this.issuesProvider.loadIssues();
-        this.update();
-        return;
-      }
-
-      if (message.type === 'generatePrompt') {
-        await this.generatePrompt();
-        return;
-      }
-
-      if (message.type === 'copyPrompt') {
-        if (!this.currentPrompt) {
-          await this.generatePrompt();
-        }
-        if (this.currentPrompt) {
-          await vscode.env.clipboard.writeText(this.currentPrompt);
-          void vscode.window.showInformationMessage('Prompt copied to clipboard.');
-        }
-        return;
-      }
-
-      if (message.type === 'openConfig') {
-        await this.configurationEditor.open();
-        return;
-      }
-
-      if (message.type === 'setPromptOptions') {
-        this.target = message.target;
-        this.style = message.style;
-        this.update();
-        return;
-      }
+      await this.handleMessage(message);
     });
 
     if (this.issuesProvider.getAllIssues().length === 0) {
@@ -190,5 +124,75 @@ export class IssuesWorkspaceEditor {
         selected: selectedKeys.has(issue.key)
       }))
     };
+  }
+
+  private async handleMessage(message: IssuesWorkspaceMessage): Promise<void> {
+    switch (message.type) {
+      case 'setFilters':
+        this.applyFilters(message);
+        break;
+      case 'toggleIssue':
+        this.toggleIssue(message.key);
+        break;
+      case 'selectVisible':
+        this.selectionState.selectMany(this.issuesProvider.getVisibleIssues());
+        break;
+      case 'clearSelection':
+        this.selectionState.clear();
+        break;
+      case 'clearFilters':
+        this.filterState.clear();
+        break;
+      case 'refresh':
+        await this.issuesProvider.loadIssues();
+        this.update();
+        break;
+      case 'generatePrompt':
+        await this.generatePrompt();
+        break;
+      case 'copyPrompt':
+        await this.copyPrompt();
+        break;
+      case 'openConfig':
+        await this.configurationEditor.open();
+        break;
+      case 'setPromptOptions':
+        this.target = message.target;
+        this.style = message.style;
+        this.update();
+        break;
+    }
+  }
+
+  private applyFilters(message: Extract<IssuesWorkspaceMessage, { type: 'setFilters' }>): void {
+    this.filterState.setFilters({
+      types: message.filters.types as IssueFilters['types'],
+      severities: message.filters.severities as IssueFilters['severities'],
+      statuses: message.filters.statuses,
+      ruleQuery: message.filters.ruleQuery?.trim() || undefined,
+      componentQuery: message.filters.componentQuery?.trim() || undefined
+    });
+  }
+
+  private toggleIssue(issueKey?: string): void {
+    if (!issueKey) {
+      return;
+    }
+
+    const issue = this.issuesProvider.getAllIssues().find((candidate) => candidate.key === issueKey);
+    if (issue) {
+      this.selectionState.toggle(issue);
+    }
+  }
+
+  private async copyPrompt(): Promise<void> {
+    if (!this.currentPrompt) {
+      await this.generatePrompt();
+    }
+
+    if (this.currentPrompt) {
+      await vscode.env.clipboard.writeText(this.currentPrompt);
+      await vscode.window.showInformationMessage('Prompt copied to clipboard.');
+    }
   }
 }

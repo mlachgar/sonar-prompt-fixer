@@ -64,6 +64,7 @@ export class SonarCloudBackend implements SonarBackend {
       organization: this.connection.organization,
       branch: this.connection.branch,
       pullRequest: this.connection.pullRequest,
+      statuses: 'OPEN,CONFIRMED,REOPENED',
       ps: 500
     });
 

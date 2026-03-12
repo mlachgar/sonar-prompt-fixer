@@ -15,9 +15,9 @@ type IssuesWorkspaceModel = {
 
 export function renderIssuesWorkspaceHtml(webview: import('vscode').Webview, model: IssuesWorkspaceModel): string {
   const nonce = createNonce();
-  const stateJson = JSON.stringify(model).replace(/</g, '\\u003c');
+  const stateJson = JSON.stringify(model).replaceAll('<', '\\u003c');
 
-  return `<!DOCTYPE html>
+  return String.raw`<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />

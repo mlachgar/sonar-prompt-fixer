@@ -38,7 +38,8 @@ export class SonarHttpClient {
     };
 
     if (this.connection.type === 'server' && this.connection.authMode === 'basicToken') {
-      headers.Authorization = `Basic ${Buffer.from(`${this.token}:`).toString('base64')}`;
+      const encodedToken = Buffer.from(`${this.token}:`).toString('base64');
+      headers.Authorization = `Basic ${encodedToken}`;
     } else {
       headers.Authorization = `Bearer ${this.token}`;
     }

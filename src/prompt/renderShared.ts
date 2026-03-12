@@ -13,12 +13,7 @@ export function renderIssueList(input: CanonicalPromptInput): string {
 }
 
 export function renderSharedConstraints(style: CanonicalPromptInput['style']): string {
-  const styleLine =
-    style === 'minimal'
-      ? 'Keep the response brief and execution-focused.'
-      : style === 'guided'
-        ? 'Explain reasoning where it helps, but keep changes localized and practical.'
-        : 'Balance concise execution with enough explanation to justify fixes.';
+  const styleLine = getStyleLine(style);
 
   return [
     'Constraints:',
@@ -29,4 +24,16 @@ export function renderSharedConstraints(style: CanonicalPromptInput['style']): s
     '- End with a short summary grouped by file.',
     `- ${styleLine}`
   ].join('\n');
+}
+
+function getStyleLine(style: CanonicalPromptInput['style']): string {
+  if (style === 'minimal') {
+    return 'Keep the response brief and execution-focused.';
+  }
+
+  if (style === 'guided') {
+    return 'Explain reasoning where it helps, but keep changes localized and practical.';
+  }
+
+  return 'Balance concise execution with enough explanation to justify fixes.';
 }

@@ -29,7 +29,7 @@ export class ConfigurationEditor {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Active);
       await this.refreshToken();
-      await this.update();
+      this.update();
       return;
     }
 
@@ -59,7 +59,7 @@ export class ConfigurationEditor {
     });
 
     await this.refreshToken();
-    await this.update();
+    this.update();
   }
 
   public update(): void {
@@ -108,11 +108,11 @@ export class ConfigurationEditor {
       }
 
       this.statusKind = 'success';
-      await this.update();
+      this.update();
     } catch (error) {
       this.statusMessage = error instanceof Error ? error.message : 'Failed to save connection settings.';
       this.statusKind = 'error';
-      await this.update();
+      this.update();
     }
   }
 
@@ -122,18 +122,18 @@ export class ConfigurationEditor {
       const result = await backend.testConnection();
       this.statusMessage = result.details ? `${result.message} ${result.details}` : result.message;
       this.statusKind = result.ok ? 'success' : 'error';
-      await this.update();
+      this.update();
     } catch (error) {
       if (error instanceof ConfigurationError) {
         this.statusMessage = error.message;
         this.statusKind = 'error';
-        await this.update();
+        this.update();
         return;
       }
 
       this.statusMessage = error instanceof Error ? error.message : 'Connection test failed.';
       this.statusKind = 'error';
-      await this.update();
+      this.update();
     }
   }
 
