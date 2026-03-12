@@ -1,0 +1,6 @@
+{
+    "sonarlint.connectedMode.project": {
+        "connectionId": "mlachgar",
+        "projectKey": "mlachgar_sonar-prompt-fixer"
+    }
+}

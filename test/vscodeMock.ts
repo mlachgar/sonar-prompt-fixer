@@ -51,6 +51,9 @@ const updateCalls: UpdateCall[] = [];
 const shownErrors: string[] = [];
 const shownInfos: string[] = [];
 const shownWarnings: string[] = [];
+let workspaceFolders: Array<{ uri: { fsPath: string } }> | undefined = [
+  { uri: { fsPath: process.cwd() } }
+];
 
 export const ConfigurationTarget = {
   Global: 'global'
@@ -61,6 +64,9 @@ export const TreeItemCollapsibleState = {
 } as const;
 
 export const workspace = {
+  get workspaceFolders() {
+    return workspaceFolders;
+  },
   getConfiguration: () => ({
     get<T>(key: string, defaultValue: T): T {
       return (configurationValues.has(key) ? configurationValues.get(key) : defaultValue) as T;
@@ -105,12 +111,17 @@ export function resetVscodeMock(): void {
   shownErrors.length = 0;
   shownInfos.length = 0;
   shownWarnings.length = 0;
+  workspaceFolders = [{ uri: { fsPath: process.cwd() } }];
 }
 
 export function setConfiguration(values: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(values)) {
     configurationValues.set(key, value);
   }
+}
+
+export function setWorkspaceFolders(folders: Array<{ uri: { fsPath: string } }> | undefined): void {
+  workspaceFolders = folders;
 }
 
 export function getUpdateCalls(): UpdateCall[] {

@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { ConnectionState } from '../src/state/ConnectionState';
 import { FilterState } from '../src/state/FilterState';
 import { SelectionState } from '../src/state/SelectionState';
 import { SonarIssue } from '../src/sonar/types';
 import { ConfigurationTarget } from './vscodeMock';
-import { createSecretStorage, getUpdateCalls, setConfiguration } from './vscodeMock';
+import { createSecretStorage, getUpdateCalls, setConfiguration, setWorkspaceFolders } from './vscodeMock';
 
 const issues: SonarIssue[] = [
   {
@@ -155,8 +158,14 @@ describe('SelectionState', () => {
   });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  setWorkspaceFolders([{ uri: { fsPath: process.cwd() } }]);
+});
+
 describe('ConnectionState', () => {
   it('reads trimmed connection values and loads the stored token', async () => {
+    setWorkspaceFolders(undefined);
     setConfiguration({
       'connection.type': 'server',
       'connection.baseUrl': ' https://sonar.example.com ',
@@ -182,6 +191,54 @@ describe('ConnectionState', () => {
       authMode: 'basicToken'
     });
     await expect(state.getToken()).resolves.toBe('secret-token');
+  });
+
+  it('falls back to sonar-project.properties when settings are empty', () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-fallback-'));
+    setConfiguration({
+      'connection.type': 'cloud',
+      'connection.baseUrl': 'https://sonarcloud.io',
+      'connection.projectKey': ' ',
+      'connection.organization': ' '
+    });
+    setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
+    fs.writeFileSync(
+      path.join(workspacePath, 'sonar-project.properties'),
+      'sonar.projectKey=from-file\nsonar.organization=from-org\n'
+    );
+
+    const state = new ConnectionState({ secrets: createSecretStorage() } as never);
+
+    expect(state.getConnection()).toMatchObject({
+      projectKey: 'from-file',
+      organization: 'from-org'
+    });
+
+    fs.rmSync(workspacePath, { recursive: true, force: true });
+  });
+
+  it('does not override explicit settings with sonar-project.properties values', () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-explicit-'));
+    setConfiguration({
+      'connection.type': 'cloud',
+      'connection.baseUrl': 'https://sonarcloud.io',
+      'connection.projectKey': 'configured-key',
+      'connection.organization': 'configured-org'
+    });
+    setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
+    fs.writeFileSync(
+      path.join(workspacePath, 'sonar-project.properties'),
+      'sonar.projectKey=from-file\nsonar.organization=from-org\n'
+    );
+
+    const state = new ConnectionState({ secrets: createSecretStorage() } as never);
+
+    expect(state.getConnection()).toMatchObject({
+      projectKey: 'configured-key',
+      organization: 'configured-org'
+    });
+
+    fs.rmSync(workspacePath, { recursive: true, force: true });
   });
 
   it('updates settings, updates full connection, and notifies listeners', async () => {

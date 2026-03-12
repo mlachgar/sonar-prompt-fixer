@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SonarConnection } from '../sonar/types';
 import { loadToken } from '../util/secrets';
+import { loadSonarProjectProperties } from '../util/sonarProjectProperties';
 
 export class ConnectionState {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
@@ -10,11 +11,14 @@ export class ConnectionState {
 
   public getConnection(): SonarConnection {
     const config = vscode.workspace.getConfiguration('sonarPromptFixer');
+    const fallbackProperties = loadSonarProjectProperties();
     const baseUrl = config.get<string>('connection.baseUrl', 'https://sonarcloud.io').trim();
-    const projectKey = config.get<string>('connection.projectKey', '').trim();
-    const organization = config.get<string>('connection.organization', '').trim();
+    const configuredProjectKey = config.get<string>('connection.projectKey', '').trim();
+    const configuredOrganization = config.get<string>('connection.organization', '').trim();
     const branch = config.get<string>('connection.branch', '').trim();
     const pullRequest = config.get<string>('connection.pullRequest', '').trim();
+    const projectKey = configuredProjectKey || fallbackProperties.projectKey || '';
+    const organization = configuredOrganization || fallbackProperties.organization || '';
 
     return {
       type: config.get<'cloud' | 'server'>('connection.type', 'cloud'),
