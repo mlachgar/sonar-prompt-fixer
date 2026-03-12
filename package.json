@@ -30,7 +30,7 @@
       "sonarPromptFixer": [
         {
           "id": "sonarPromptFixer.issues",
-          "name": "Issues",
+          "name": "Findings",
           "icon": "media/sonar.svg"
         }
       ]
@@ -43,7 +43,7 @@
       },
       {
         "command": "sonarPromptFixer.openIssuesWorkspace",
-        "title": "Sonar Prompt Fixer: Open Issues Workspace",
+        "title": "Sonar Prompt Fixer: Open Sonar Workspace",
         "icon": "$(layout)"
       }
     ],

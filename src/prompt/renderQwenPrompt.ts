@@ -1,25 +1,55 @@
 import { CanonicalPromptInput } from './types';
-import { renderIssueList, renderSharedConstraints } from './renderShared';
+import {
+  getSourceDeliverables,
+  getSourceExecutionRules,
+  getSourceHeading,
+  renderSelectionList,
+  renderSharedConstraints
+} from './renderShared';
 
 export function renderQwenPrompt(input: CanonicalPromptInput): string {
   return [
-    'Task: fix the selected Sonar issues in the current repository.',
+    getQwenIntro(input),
     '',
-    `Primary goal: address the findings for project "${input.connection.projectKey}" with low-risk, localized edits.`,
+    getQwenGoal(input),
     '',
-    'Issue set:',
-    renderIssueList(input),
+    getSourceHeading(input),
+    renderSelectionList(input),
     '',
     renderSharedConstraints(input.style),
     '',
     'Execution rules:',
-    '- Read the impacted code paths before changing them.',
-    '- Keep edits tightly scoped to the listed issues.',
-    '- Avoid unrelated cleanup or restructuring.',
+    ...getSourceExecutionRules(input),
     '',
     'Output contract:',
-    '- Apply the fixes.',
-    '- Report the final changes by file.',
-    '- Mention anything still unresolved.'
+    ...getSourceDeliverables(input)
   ].join('\n');
+}
+
+function getQwenIntro(input: CanonicalPromptInput): string {
+  switch (input.source) {
+    case 'coverage':
+      return 'Task: add tests for the selected coverage gaps in the current repository.';
+    case 'duplication':
+      return 'Task: reduce the selected code duplication in the current repository.';
+    case 'hotspots':
+      return 'Task: fix the selected security hotspots in the current repository.';
+    case 'issues':
+    default:
+      return 'Task: fix the selected Sonar issues in the current repository.';
+  }
+}
+
+function getQwenGoal(input: CanonicalPromptInput): string {
+  switch (input.source) {
+    case 'coverage':
+      return `Primary goal: increase coverage for project "${input.connection.projectKey}" with targeted tests and minimal production edits.`;
+    case 'duplication':
+      return `Primary goal: reduce duplication for project "${input.connection.projectKey}" with low-risk, localized refactors.`;
+    case 'hotspots':
+      return `Primary goal: address the selected security hotspots for project "${input.connection.projectKey}" with low-risk, localized edits.`;
+    case 'issues':
+    default:
+      return `Primary goal: address the findings for project "${input.connection.projectKey}" with low-risk, localized edits.`;
+  }
 }

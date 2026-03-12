@@ -15,6 +15,37 @@ export type SonarIssue = {
   tags?: string[];
 };
 
+export type SonarCoverageTarget = {
+  key: string;
+  component: string;
+  path: string;
+  coverage?: number;
+  lineCoverage?: number;
+  branchCoverage?: number;
+  linesToCover?: number;
+  uncoveredLines?: number;
+  conditionsToCover?: number;
+  uncoveredConditions?: number;
+};
+
+export type SonarDuplicationTarget = {
+  key: string;
+  component: string;
+  path: string;
+  duplicatedLinesDensity?: number;
+  duplicatedLines?: number;
+  duplicatedBlocks?: number;
+};
+
+export type SonarSecurityHotspot = {
+  key: string;
+  component: string;
+  line?: number;
+  message: string;
+  status?: string;
+  vulnerabilityProbability?: string;
+};
+
 export type SonarConnection = {
   type: SonarTargetType;
   baseUrl: string;
@@ -68,4 +99,16 @@ export type ConnectionTestResult = {
     | 'configuration'
     | 'unknown';
   details?: string;
+};
+
+export type SonarKpiSummary = {
+  coverage?: number;
+  lineCoverage?: number;
+  branchCoverage?: number;
+  duplicationDensity?: number;
+  duplicatedLines?: number;
+  duplicatedBlocks?: number;
+  securityHotspots?: number;
+  securityHotspotsReviewed?: number;
+  securityReviewRating?: string;
 };

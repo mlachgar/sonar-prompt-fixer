@@ -1,8 +1,8 @@
-import { CanonicalPromptInput, PromptStyle, PromptTarget } from './types';
-import { SonarConnection, SonarIssue } from '../sonar/types';
+import { CanonicalPromptInput, PromptSelection, PromptStyle, PromptTarget } from './types';
+import { SonarConnection } from '../sonar/types';
 
 export function buildCanonicalPromptInput(
-  issues: SonarIssue[],
+  selection: PromptSelection,
   target: PromptTarget,
   style: PromptStyle,
   connection: SonarConnection
@@ -11,7 +11,7 @@ export function buildCanonicalPromptInput(
     target,
     style,
     connection,
-    issues,
+    ...selection,
     generatedAt: new Date().toISOString()
   };
 }

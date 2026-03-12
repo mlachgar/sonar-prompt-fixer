@@ -1,6 +1,6 @@
 # Sonar Prompt Fixer
 
-Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a self-hosted SonarQube Server, fetches issues for a configured project, and generates remediation prompts for coding agents such as Codex, Claude Code, and Qwen Code. The primary workflow lives in a dedicated Issues Workspace, while the sidebar stays lightweight and focused on entry points.
+Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a self-hosted SonarQube Server, fetches actionable project data, and generates remediation prompts for coding agents such as Codex, Claude Code, and Qwen Code. The primary workflow lives in a dedicated workspace with separate modes for issues, coverage gaps, duplication targets, and security hotspots, while the sidebar stays lightweight and focused on entry points.
 
 ## Features
 
@@ -8,9 +8,15 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
 - Secure token storage with VS Code `SecretStorage`
 - Automatic configuration prefill from `sonar-project.properties` when project key or organization are not yet set
 - Automatic token fallback from `.env` when `SONAR_TOKEN` is present and no token is stored yet
-- Configuration editor opened from the Issues view
+- One-time onboarding hint that points first-time users to the Activity Bar entry
+- Configuration editor opened from the Findings view
 - Lightweight sidebar issue summary with workspace launcher
-- Editor-based two-step Issues Workspace for filtering, bulk selection, and prompt generation
+- Editor-based two-step workspace with:
+  - `Issues` mode for Sonar issues
+  - `Coverage` mode for uncovered files and branches
+  - `Duplication` mode for duplicated files and refactoring targets
+  - `Security Hotspots` mode for hotspot remediation
+- KPI summary chips for coverage and security review metrics
 - Canonical prompt builder with lightweight renderers for:
   - Codex
   - Claude Code
@@ -35,7 +41,7 @@ Key settings:
 - `sonarPromptFixer.prompt.defaultTarget`
 - `sonarPromptFixer.prompt.defaultStyle`
 
-You can set these from the configuration editor opened from the `Issues` view.
+You can set these from the configuration editor opened from the `Findings` view.
 
 When the saved configuration is still empty, the extension also tries to prefill:
 
@@ -55,20 +61,52 @@ If no token is stored yet, the extension also tries to read `SONAR_TOKEN` from a
 ## Commands
 
 - `Sonar Prompt Fixer: Open Configuration Editor`
-- `Sonar Prompt Fixer: Open Issues Workspace`
+- `Sonar Prompt Fixer: Open Sonar Workspace`
 
 These are the only public commands. Day-to-day work such as filtering, selection, prompt generation, and prompt copying happens inside the workspace UI.
+
+## Workspace Modes
+
+The editor-based workspace is the main place to work with Sonar data.
+
+It provides:
+
+- `Issues` mode for filtering and selecting open Sonar issues
+- `Coverage` mode for selecting files with uncovered lines or uncovered branch conditions
+- `Duplication` mode for selecting files with duplicated lines or duplicated blocks
+- `Security Hotspots` mode for selecting hotspot findings that need review or remediation
+- KPI chips at the top of the workspace for:
+  - overall coverage
+  - line coverage
+  - branch coverage
+  - duplication density
+  - duplicated lines
+  - security hotspot count
+  - reviewed hotspot percentage
+  - security review rating
+
+Each mode has its own filters and selection set, but all three share the same step flow:
+
+1. Select the findings or targets to include.
+2. Generate a prompt tailored to the current mode.
 
 ## Prompt Generation
 
 Prompt generation uses one canonical input model:
 
-- selected normalized Sonar issues
+- selected normalized Sonar data
 - active prompt target
 - active prompt style
 - current connection metadata
 
-Each target renderer keeps the same semantics and issue content, while adapting:
+Supported prompt sources:
+
+- Sonar issues
+- coverage targets
+- duplication targets
+- security hotspots
+
+Each target renderer keeps the same semantics and selected content, while adapting:
 
 - tone
 - structure
@@ -109,13 +147,19 @@ npm run test:coverage
 
 3. Open this folder in VS Code.
 4. Press `F5` to launch the Extension Development Host.
-5. In the new window, open the `Sonar Prompt Fixer` sidebar.
-6. In the `Issues` view, open the configuration editor.
-7. Review the prefilled values from `sonar-project.properties` and `.env` if those files exist.
-8. Save your settings and token, then test the connection from that editor.
-9. In the `Issues` view, click the workspace button to open the editor-based Issues Workspace.
-10. Use step 1 of the Issues Workspace to filter issues and select findings.
-11. Move to step 2 to generate and copy the prompt.
+5. On first activation, the extension shows a one-time onboarding hint with shortcuts to configuration and the Sonar Workspace.
+6. In the new window, open the `Sonar Prompt Fixer` sidebar.
+7. In the `Findings` view, open the configuration editor.
+8. Review the prefilled values from `sonar-project.properties` and `.env` if those files exist.
+9. Save your settings and token, then test the connection from that editor.
+10. In the `Findings` view, click the workspace button to open the editor-based Sonar Workspace.
+11. Choose a mode:
+    - `Issues`
+    - `Coverage`
+    - `Duplication`
+    - `Security Hotspots`
+12. Use step 1 to filter and select the relevant items.
+13. Move to step 2 to generate and copy the prompt.
 
 ## How To Test
 
@@ -127,16 +171,33 @@ npm run test:coverage
   - self-signed certificate setup
 - Confirm empty configuration is prefilled from `sonar-project.properties` when available.
 - Confirm a stored token still takes precedence over `.env`.
-- Fetch issues and test local filtering by:
+- Confirm the onboarding hint appears once on first activation and does not block startup.
+- In `Issues` mode, fetch issues and test local filtering by:
   - type
   - severity
   - status
   - rule substring
   - file/component substring
-- Use the Issues Workspace for bulk selection and wider issue review.
-- Confirm the table shows severity, type, status, rule, relative location, and message without unwanted horizontal scrolling.
+- In `Coverage` mode, confirm the table lists uncovered files and shows:
+  - coverage
+  - line coverage
+  - branch coverage
+  - uncovered lines
+  - uncovered branches
+- In `Duplication` mode, confirm the table lists duplicated files and shows:
+  - duplication percentage
+  - duplicated lines
+  - duplicated blocks
+- In `Security Hotspots` mode, confirm the table lists:
+  - probability
+  - status
+  - relative location
+  - message
+- Confirm KPI chips render at the top of the workspace.
+- Use the workspace for bulk selection and wider review.
+- Confirm the tables show relative locations without unwanted horizontal scrolling.
 - Confirm the status combobox shows all status options cleanly.
-- Generate prompts for all three targets directly in the Issues Workspace and copy them from the prompt panel.
+- Generate prompts in all three workspace modes for all three coding-agent targets and copy them from the prompt panel.
 
 ## GitHub CI And SonarQube Cloud
 
@@ -168,11 +229,11 @@ Recommended coverage strategy for this codebase:
 
 ## Known Limitations
 
-- Issue fetching is currently a single-page request capped at 500 issues.
+- Issue, coverage, and hotspot fetching are currently single-page requests capped at 500 items.
 - Filtering is local and in-memory after fetch.
 - Rule metadata is fetched through the backend abstraction but is not yet surfaced in the UI.
 - The tree currently groups by one setting at a time: severity or type.
-- The sidebar is intentionally lightweight; rich issue filtering and prompt actions live in the Issues Workspace.
+- The sidebar is intentionally lightweight; rich filtering and prompt actions live in the workspace.
 - The webview is intentionally lightweight and does not use an external frontend framework.
 
 ## Architecture Overview
@@ -190,7 +251,7 @@ Recommended maintainable MVP layout:
 - `src/webview`
   - configuration editor panel and issues workspace editor
 - `src/commands`
-  - command registration modules
+  - lightweight entry-point command registration modules
 
 ## Roadmap Ideas
 

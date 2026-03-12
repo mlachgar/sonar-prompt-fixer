@@ -123,6 +123,57 @@ describe('SonarCloudBackend', () => {
           }]
         })
         .mockResolvedValueOnce({
+          components: [{
+            key: 'proj:src/file.ts',
+            path: 'src/file.ts',
+            name: 'file.ts',
+            measures: [
+              { metric: 'coverage', value: '55.5' },
+              { metric: 'line_coverage', value: '70.0' },
+              { metric: 'branch_coverage', value: '40.0' },
+              { metric: 'uncovered_lines', value: '4' },
+              { metric: 'uncovered_conditions', value: '2' }
+            ]
+          }]
+        })
+        .mockResolvedValueOnce({
+          components: [{
+            key: 'proj:src/shared.ts',
+            path: 'src/shared.ts',
+            name: 'shared.ts',
+            measures: [
+              { metric: 'duplicated_lines_density', value: '12.5' },
+              { metric: 'duplicated_lines', value: '10' },
+              { metric: 'duplicated_blocks', value: '2' }
+            ]
+          }]
+        })
+        .mockResolvedValueOnce({
+          hotspots: [{
+            key: 'hot-1',
+            component: 'proj:src/auth.ts',
+            line: 10,
+            message: 'Review this auth flow.',
+            status: 'TO_REVIEW',
+            vulnerabilityProbability: 'HIGH'
+          }]
+        })
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: 'coverage', value: '82.1' },
+              { metric: 'line_coverage', value: '85.0' },
+              { metric: 'branch_coverage', value: '70.0' },
+              { metric: 'duplicated_lines_density', value: '4.5' },
+              { metric: 'duplicated_lines', value: '24' },
+              { metric: 'duplicated_blocks', value: '5' },
+              { metric: 'security_hotspots', value: '3' },
+              { metric: 'security_hotspots_reviewed', value: '66.7' },
+              { metric: 'security_review_rating', value: 'A' }
+            ]
+          }
+        })
+        .mockResolvedValueOnce({
           rules: [{ key: 'typescript:S1', name: 'Rule 1' }]
         })
         .mockResolvedValueOnce({
@@ -143,6 +194,45 @@ describe('SonarCloudBackend', () => {
       effort: undefined,
       tags: ['tag']
     }]);
+    await expect(backend.getCoverageTargets()).resolves.toEqual([{
+      key: 'proj:src/file.ts',
+      component: 'src/file.ts',
+      path: 'src/file.ts',
+      coverage: 55.5,
+      lineCoverage: 70,
+      branchCoverage: 40,
+      linesToCover: undefined,
+      uncoveredLines: 4,
+      conditionsToCover: undefined,
+      uncoveredConditions: 2
+    }]);
+    await expect(backend.getDuplicationTargets()).resolves.toEqual([{
+      key: 'proj:src/shared.ts',
+      component: 'src/shared.ts',
+      path: 'src/shared.ts',
+      duplicatedLinesDensity: 12.5,
+      duplicatedLines: 10,
+      duplicatedBlocks: 2
+    }]);
+    await expect(backend.getSecurityHotspots()).resolves.toEqual([{
+      key: 'hot-1',
+      component: 'proj:src/auth.ts',
+      line: 10,
+      message: 'Review this auth flow.',
+      status: 'TO_REVIEW',
+      vulnerabilityProbability: 'HIGH'
+    }]);
+    await expect(backend.getKpiSummary()).resolves.toEqual({
+      coverage: 82.1,
+      lineCoverage: 85,
+      branchCoverage: 70,
+      duplicationDensity: 4.5,
+      duplicatedLines: 24,
+      duplicatedBlocks: 5,
+      securityHotspots: 3,
+      securityHotspotsReviewed: 66.7,
+      securityReviewRating: 'A'
+    });
     await expect(backend.getRules(['typescript:S1'])).resolves.toEqual([{ key: 'typescript:S1', name: 'Rule 1', htmlDesc: undefined, severity: undefined, type: undefined }]);
     await expect(backend.getRules([])).resolves.toEqual([]);
     await expect(backend.getProjectInfo()).resolves.toEqual({ key: 'proj', name: 'Project', qualifier: 'TRK' });
@@ -161,6 +251,144 @@ describe('SonarCloudBackend', () => {
       statuses: 'OPEN,CONFIRMED,REOPENED',
       ps: 500
     });
+  });
+
+  it('filters out fully covered files and tolerates invalid KPI values', async () => {
+    const backend = new SonarCloudBackend(cloudConnection, 'token');
+    (backend as any).httpClient = mockClient({
+      getJson: vi.fn()
+        .mockResolvedValueOnce({
+          components: [
+            {
+              key: 'proj:src/covered.ts',
+              name: 'covered.ts',
+              measures: [
+                { metric: 'coverage', value: '100' },
+                { metric: 'uncovered_lines', value: '0' },
+                { metric: 'uncovered_conditions', value: '0' }
+              ]
+            },
+            {
+              key: 'proj:src/partial.ts',
+              name: 'partial.ts',
+              measures: [
+                { metric: 'coverage', value: 'oops' },
+                { metric: 'uncovered_lines', value: '3' }
+              ]
+            },
+            {
+              key: 'proj:src/branches.ts',
+              name: 'branches.ts',
+              measures: [
+                { metric: 'uncovered_lines', value: '0' },
+                { metric: 'uncovered_conditions', value: '2' }
+              ]
+            },
+            {
+              key: 'proj:src/fallback.ts',
+              name: 'fallback.ts'
+            }
+          ]
+        })
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: 'coverage', value: 'NaN-ish' },
+              { metric: 'duplicated_lines', value: '7' },
+              { metric: 'security_hotspots', value: '2' }
+            ]
+          }
+        })
+    });
+
+    await expect(backend.getCoverageTargets()).resolves.toEqual([{
+      key: 'proj:src/partial.ts',
+      component: 'partial.ts',
+      path: 'partial.ts',
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      linesToCover: undefined,
+      uncoveredLines: 3,
+      conditionsToCover: undefined,
+      uncoveredConditions: undefined
+    }, {
+      key: 'proj:src/branches.ts',
+      component: 'branches.ts',
+      path: 'branches.ts',
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      linesToCover: undefined,
+      uncoveredLines: 0,
+      conditionsToCover: undefined,
+      uncoveredConditions: 2
+    }]);
+    await expect(backend.getKpiSummary()).resolves.toEqual({
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      duplicationDensity: undefined,
+      duplicatedLines: 7,
+      duplicatedBlocks: undefined,
+      securityHotspots: 2,
+      securityHotspotsReviewed: undefined,
+      securityReviewRating: undefined
+    });
+  });
+
+  it('filters out clean duplication targets', async () => {
+    const backend = new SonarCloudBackend(cloudConnection, 'token');
+    (backend as any).httpClient = mockClient({
+      getJson: vi.fn().mockResolvedValue({
+        components: [
+          {
+            key: 'proj:src/clean.ts',
+            name: 'clean.ts',
+            measures: [
+              { metric: 'duplicated_lines_density', value: '0' },
+              { metric: 'duplicated_lines', value: '0' },
+              { metric: 'duplicated_blocks', value: '0' }
+            ]
+          },
+          {
+            key: 'proj:src/shared.ts',
+            name: 'shared.ts',
+            measures: [
+              { metric: 'duplicated_lines_density', value: 'oops' },
+              { metric: 'duplicated_blocks', value: '2' }
+            ]
+          },
+          {
+            key: 'proj:src/lines.ts',
+            name: 'lines.ts',
+            measures: [
+              { metric: 'duplicated_lines', value: '6' }
+            ]
+          },
+          {
+            key: 'proj:src/fallback.ts',
+            name: 'fallback.ts'
+          }
+        ]
+      })
+    });
+
+    await expect(backend.getDuplicationTargets()).resolves.toEqual([{
+      key: 'proj:src/shared.ts',
+      component: 'shared.ts',
+      path: 'shared.ts',
+      duplicatedLinesDensity: undefined,
+      duplicatedLines: undefined,
+      duplicatedBlocks: 2
+    }, {
+      key: 'proj:src/lines.ts',
+      component: 'lines.ts',
+      path: 'lines.ts',
+      duplicatedLinesDensity: undefined,
+      duplicatedLines: 6,
+      duplicatedBlocks: undefined
+    }]);
   });
 });
 
@@ -220,6 +448,57 @@ describe('SonarQubeServerBackend', () => {
           }]
         })
         .mockResolvedValueOnce({
+          components: [{
+            key: 'proj:src/file.ts',
+            path: 'src/file.ts',
+            name: 'file.ts',
+            measures: [
+              { metric: 'coverage', value: '50' },
+              { metric: 'line_coverage', value: '60' },
+              { metric: 'branch_coverage', value: '40' },
+              { metric: 'uncovered_lines', value: '8' },
+              { metric: 'uncovered_conditions', value: '3' }
+            ]
+          }]
+        })
+        .mockResolvedValueOnce({
+          components: [{
+            key: 'proj:src/shared.ts',
+            path: 'src/shared.ts',
+            name: 'shared.ts',
+            measures: [
+              { metric: 'duplicated_lines_density', value: '15' },
+              { metric: 'duplicated_lines', value: '14' },
+              { metric: 'duplicated_blocks', value: '3' }
+            ]
+          }]
+        })
+        .mockResolvedValueOnce({
+          hotspots: [{
+            key: 'hot-1',
+            component: 'proj:src/auth.ts',
+            line: 10,
+            message: 'Review this auth flow.',
+            status: 'TO_REVIEW',
+            vulnerabilityProbability: 'MEDIUM'
+          }]
+        })
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: 'coverage', value: '75' },
+              { metric: 'line_coverage', value: '80' },
+              { metric: 'branch_coverage', value: '55' },
+              { metric: 'duplicated_lines_density', value: '6' },
+              { metric: 'duplicated_lines', value: '12' },
+              { metric: 'duplicated_blocks', value: '4' },
+              { metric: 'security_hotspots', value: '4' },
+              { metric: 'security_hotspots_reviewed', value: '25' },
+              { metric: 'security_review_rating', value: 'B' }
+            ]
+          }
+        })
+        .mockResolvedValueOnce({
           rules: [{ key: 'typescript:S1', name: 'Rule 1', severity: 'BLOCKER', type: 'BUG' }]
         })
         .mockResolvedValueOnce({
@@ -239,6 +518,45 @@ describe('SonarQubeServerBackend', () => {
       pullRequest: '42',
       statuses: 'OPEN,CONFIRMED,REOPENED',
       ps: 500
+    });
+    await expect(backend.getCoverageTargets()).resolves.toEqual([{
+      key: 'proj:src/file.ts',
+      component: 'src/file.ts',
+      path: 'src/file.ts',
+      coverage: 50,
+      lineCoverage: 60,
+      branchCoverage: 40,
+      linesToCover: undefined,
+      uncoveredLines: 8,
+      conditionsToCover: undefined,
+      uncoveredConditions: 3
+    }]);
+    await expect(backend.getDuplicationTargets()).resolves.toEqual([{
+      key: 'proj:src/shared.ts',
+      component: 'src/shared.ts',
+      path: 'src/shared.ts',
+      duplicatedLinesDensity: 15,
+      duplicatedLines: 14,
+      duplicatedBlocks: 3
+    }]);
+    await expect(backend.getSecurityHotspots()).resolves.toEqual([{
+      key: 'hot-1',
+      component: 'proj:src/auth.ts',
+      line: 10,
+      message: 'Review this auth flow.',
+      status: 'TO_REVIEW',
+      vulnerabilityProbability: 'MEDIUM'
+    }]);
+    await expect(backend.getKpiSummary()).resolves.toEqual({
+      coverage: 75,
+      lineCoverage: 80,
+      branchCoverage: 55,
+      duplicationDensity: 6,
+      duplicatedLines: 12,
+      duplicatedBlocks: 4,
+      securityHotspots: 4,
+      securityHotspotsReviewed: 25,
+      securityReviewRating: 'B'
     });
     await expect(backend.getRules(['typescript:S1'])).resolves.toEqual([{
       key: 'typescript:S1',
@@ -271,5 +589,143 @@ describe('SonarQubeServerBackend', () => {
       isCloud: false,
       serverVersion: undefined
     });
+  });
+
+  it('filters out fully covered server files and tolerates invalid KPI values', async () => {
+    const backend = new SonarQubeServerBackend(serverConnection, 'token');
+    (backend as any).httpClient = mockClient({
+      getJson: vi.fn()
+        .mockResolvedValueOnce({
+          components: [
+            {
+              key: 'proj:src/covered.ts',
+              name: 'covered.ts',
+              measures: [
+                { metric: 'coverage', value: '100' },
+                { metric: 'uncovered_lines', value: '0' },
+                { metric: 'uncovered_conditions', value: '0' }
+              ]
+            },
+            {
+              key: 'proj:src/partial.ts',
+              name: 'partial.ts',
+              measures: [
+                { metric: 'uncovered_lines', value: '1' },
+                { metric: 'branch_coverage', value: 'bad-number' },
+                { metric: 'uncovered_conditions', value: '4' }
+              ]
+            },
+            {
+              key: 'proj:src/branches-only.ts',
+              name: 'branches-only.ts',
+              measures: [
+                { metric: 'uncovered_lines', value: '0' },
+                { metric: 'uncovered_conditions', value: '5' }
+              ]
+            },
+            {
+              key: 'proj:src/fallback.ts',
+              name: 'fallback.ts'
+            }
+          ]
+        })
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: 'branch_coverage', value: 'still-bad' },
+              { metric: 'duplicated_blocks', value: '9' },
+              { metric: 'security_review_rating', value: 'C' }
+            ]
+          }
+        })
+    });
+
+    await expect(backend.getCoverageTargets()).resolves.toEqual([{
+      key: 'proj:src/partial.ts',
+      component: 'partial.ts',
+      path: 'partial.ts',
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      linesToCover: undefined,
+      uncoveredLines: 1,
+      conditionsToCover: undefined,
+      uncoveredConditions: 4
+    }, {
+      key: 'proj:src/branches-only.ts',
+      component: 'branches-only.ts',
+      path: 'branches-only.ts',
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      linesToCover: undefined,
+      uncoveredLines: 0,
+      conditionsToCover: undefined,
+      uncoveredConditions: 5
+    }]);
+    await expect(backend.getKpiSummary()).resolves.toEqual({
+      coverage: undefined,
+      lineCoverage: undefined,
+      branchCoverage: undefined,
+      duplicationDensity: undefined,
+      duplicatedLines: undefined,
+      duplicatedBlocks: 9,
+      securityHotspots: undefined,
+      securityHotspotsReviewed: undefined,
+      securityReviewRating: 'C'
+    });
+  });
+
+  it('filters out clean server duplication targets', async () => {
+    const backend = new SonarQubeServerBackend(serverConnection, 'token');
+    (backend as any).httpClient = mockClient({
+      getJson: vi.fn().mockResolvedValue({
+        components: [
+          {
+            key: 'proj:src/clean.ts',
+            name: 'clean.ts',
+            measures: [
+              { metric: 'duplicated_lines_density', value: '0' },
+              { metric: 'duplicated_lines', value: '0' }
+            ]
+          },
+          {
+            key: 'proj:src/shared.ts',
+            name: 'shared.ts',
+            measures: [
+              { metric: 'duplicated_lines_density', value: '3.5' },
+              { metric: 'duplicated_blocks', value: 'bad-number' }
+            ]
+          },
+          {
+            key: 'proj:src/lines.ts',
+            name: 'lines.ts',
+            measures: [
+              { metric: 'duplicated_lines', value: '5' }
+            ]
+          },
+          {
+            key: 'proj:src/fallback.ts',
+            name: 'fallback.ts'
+          }
+        ]
+      })
+    });
+
+    await expect(backend.getDuplicationTargets()).resolves.toEqual([{
+      key: 'proj:src/shared.ts',
+      component: 'shared.ts',
+      path: 'shared.ts',
+      duplicatedLinesDensity: 3.5,
+      duplicatedLines: undefined,
+      duplicatedBlocks: undefined
+    }, {
+      key: 'proj:src/lines.ts',
+      component: 'lines.ts',
+      path: 'lines.ts',
+      duplicatedLinesDensity: undefined,
+      duplicatedLines: 5,
+      duplicatedBlocks: undefined
+    }]);
   });
 });

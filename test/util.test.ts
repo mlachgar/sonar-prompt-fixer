@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mapConnectionError } from '../src/util/diagnostics';
 import { ConfigurationError, HttpError, isErrorWithCode } from '../src/util/errors';
 import { deleteToken, loadToken, storeToken } from '../src/util/secrets';
+import { loadSonarProjectProperties, parseSonarProjectProperties } from '../src/util/sonarProjectProperties';
 import { createSecretStorage, setWorkspaceFolders } from './vscodeMock';
 
 afterEach(() => {
@@ -93,5 +94,38 @@ describe('secret helpers', () => {
     await expect(loadToken(secrets as never, extensionPath)).resolves.toBeUndefined();
 
     fs.rmSync(extensionPath, { recursive: true, force: true });
+  });
+});
+
+describe('sonar-project.properties helpers', () => {
+  it('parses project properties and ignores comments or malformed lines', () => {
+    expect(parseSonarProjectProperties([
+      '# comment',
+      'sonar.projectKey = acme_app',
+      'invalid-line',
+      'sonar.organization=acme',
+      'sonar.projectKey='
+    ].join('\n'))).toEqual({
+      projectKey: 'acme_app',
+      organization: 'acme'
+    });
+  });
+
+  it('loads properties from the first available workspace or extension root', () => {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-workspace-'));
+    const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-extension-'));
+    fs.writeFileSync(path.join(extensionRoot, 'sonar-project.properties'), 'sonar.projectKey=from-extension');
+    setWorkspaceFolders([{ uri: { fsPath: workspaceRoot } }]);
+
+    expect(loadSonarProjectProperties(extensionRoot)).toEqual({ projectKey: 'from-extension' });
+
+    fs.writeFileSync(path.join(workspaceRoot, 'sonar-project.properties'), 'sonar.projectKey=from-workspace\nsonar.organization=acme');
+    expect(loadSonarProjectProperties(extensionRoot)).toEqual({
+      projectKey: 'from-workspace',
+      organization: 'acme'
+    });
+
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    fs.rmSync(extensionRoot, { recursive: true, force: true });
   });
 });

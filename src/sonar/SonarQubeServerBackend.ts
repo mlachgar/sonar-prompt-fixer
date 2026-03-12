@@ -1,7 +1,31 @@
 import { SonarBackend } from './SonarBackend';
 import { SonarHttpClient } from './SonarHttpClient';
+import {
+  COVERAGE_METRICS,
+  DUPLICATION_METRICS,
+  hasCoverageGap,
+  hasDuplicationGap,
+  KPI_METRICS,
+  mapCoverageTarget,
+  mapDuplicationTarget,
+  mapKpiSummary,
+  SonarMeasure,
+  SonarMeasureComponent
+} from './measureHelpers';
 import { mapIssue, mapRule } from './mappers';
-import { ConnectionTestResult, IssueFilters, SonarCapabilities, SonarConnection, SonarIssue, SonarProjectInfo, SonarRule } from './types';
+import {
+  ConnectionTestResult,
+  IssueFilters,
+  SonarCapabilities,
+  SonarConnection,
+  SonarCoverageTarget,
+  SonarDuplicationTarget,
+  SonarIssue,
+  SonarKpiSummary,
+  SonarProjectInfo,
+  SonarRule,
+  SonarSecurityHotspot
+} from './types';
 import { HttpError } from '../util/errors';
 import { mapConnectionError } from '../util/diagnostics';
 
@@ -35,6 +59,27 @@ type ProjectSearchResponse = {
     key: string;
     name: string;
     qualifier?: string;
+  }>;
+};
+
+type MeasuresResponse = {
+  component: {
+    measures: SonarMeasure[];
+  };
+};
+
+type MeasureTreeResponse = {
+  components: SonarMeasureComponent[];
+};
+
+type HotspotsSearchResponse = {
+  hotspots: Array<{
+    key: string;
+    component: string;
+    line?: number;
+    message: string;
+    status?: string;
+    vulnerabilityProbability?: string;
   }>;
 };
 
@@ -78,6 +123,66 @@ export class SonarQubeServerBackend implements SonarBackend {
     });
 
     return response.issues.map(mapIssue);
+  }
+
+  public async getCoverageTargets(): Promise<SonarCoverageTarget[]> {
+    const response = await this.httpClient.getJson<MeasureTreeResponse>('/api/measures/component_tree', {
+      component: this.connection.projectKey,
+      branch: this.connection.branch,
+      pullRequest: this.connection.pullRequest,
+      qualifiers: 'FIL',
+      metricKeys: COVERAGE_METRICS.join(','),
+      ps: 500
+    });
+
+    return response.components
+      .map(mapCoverageTarget)
+      .filter(hasCoverageGap);
+  }
+
+  public async getDuplicationTargets(): Promise<SonarDuplicationTarget[]> {
+    const response = await this.httpClient.getJson<MeasureTreeResponse>('/api/measures/component_tree', {
+      component: this.connection.projectKey,
+      branch: this.connection.branch,
+      pullRequest: this.connection.pullRequest,
+      qualifiers: 'FIL',
+      metricKeys: DUPLICATION_METRICS.join(','),
+      ps: 500
+    });
+
+    return response.components
+      .map(mapDuplicationTarget)
+      .filter(hasDuplicationGap);
+  }
+
+  public async getSecurityHotspots(): Promise<SonarSecurityHotspot[]> {
+    const response = await this.httpClient.getJson<HotspotsSearchResponse>('/api/hotspots/search', {
+      projectKey: this.connection.projectKey,
+      branch: this.connection.branch,
+      pullRequest: this.connection.pullRequest,
+      status: 'TO_REVIEW',
+      ps: 500
+    });
+
+    return response.hotspots.map((hotspot) => ({
+      key: hotspot.key,
+      component: hotspot.component,
+      line: hotspot.line,
+      message: hotspot.message,
+      status: hotspot.status,
+      vulnerabilityProbability: hotspot.vulnerabilityProbability
+    }));
+  }
+
+  public async getKpiSummary(): Promise<SonarKpiSummary> {
+    const response = await this.httpClient.getJson<MeasuresResponse>('/api/measures/component', {
+      component: this.connection.projectKey,
+      branch: this.connection.branch,
+      pullRequest: this.connection.pullRequest,
+      metricKeys: KPI_METRICS.join(',')
+    });
+
+    return mapKpiSummary(response.component.measures);
   }
 
   public async getRules(keys: string[]): Promise<SonarRule[]> {

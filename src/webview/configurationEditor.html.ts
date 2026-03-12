@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { SonarConnection } from '../sonar/types';
 
 type ConfigurationEditorModel = {
@@ -406,10 +407,5 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
 }
 
 function createNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let value = '';
-  for (let index = 0; index < 24; index += 1) {
-    value += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return value;
+  return randomBytes(18).toString('base64url');
 }

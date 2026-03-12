@@ -1,25 +1,42 @@
 import { CanonicalPromptInput } from './types';
-import { renderIssueList, renderSharedConstraints } from './renderShared';
+import {
+  getSourceDeliverables,
+  getSourceExecutionRules,
+  getSourceGoal,
+  getSourceHeading,
+  renderSelectionList,
+  renderSharedConstraints
+} from './renderShared';
 
 export function renderCodexPrompt(input: CanonicalPromptInput): string {
   return [
-    'You are fixing Sonar issues in this repository.',
+    getCodexIntro(input),
     '',
-    `Goal: Resolve the selected Sonar findings for project "${input.connection.projectKey}" with minimal, safe code changes.`,
+    getSourceGoal(input),
     '',
-    'Selected issues:',
-    renderIssueList(input),
+    getSourceHeading(input),
+    renderSelectionList(input),
     '',
     renderSharedConstraints(input.style),
     '',
     'Working agreement:',
-    '- Inspect the referenced files before editing.',
-    '- Make the smallest change that fully addresses each issue.',
-    '- Call out any issue that cannot be resolved confidently from the available code.',
+    ...getSourceExecutionRules(input),
     '',
     'Deliverables:',
-    '- Implement the fixes.',
-    '- Summarize what changed by file.',
-    '- Mention any remaining risks or follow-up items.'
+    ...getSourceDeliverables(input)
   ].join('\n');
+}
+
+function getCodexIntro(input: CanonicalPromptInput): string {
+  switch (input.source) {
+    case 'coverage':
+      return 'You are improving test coverage in this repository.';
+    case 'duplication':
+      return 'You are reducing code duplication in this repository.';
+    case 'hotspots':
+      return 'You are remediating security hotspots in this repository.';
+    case 'issues':
+    default:
+      return 'You are fixing Sonar issues in this repository.';
+  }
 }

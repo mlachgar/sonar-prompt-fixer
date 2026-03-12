@@ -6,8 +6,8 @@ export function registerOpenIssuesWorkspaceCommand(
   issuesWorkspaceEditor: IssuesWorkspaceEditor
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('sonarPromptFixer.openIssuesWorkspace', async () => {
-      await issuesWorkspaceEditor.open();
+    vscode.commands.registerCommand('sonarPromptFixer.openIssuesWorkspace', async (mode?: 'issues' | 'coverage' | 'duplication' | 'hotspots') => {
+      await issuesWorkspaceEditor.open(mode);
     })
   );
 }
