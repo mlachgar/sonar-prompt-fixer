@@ -1,0 +1,159 @@
+{
+  "name": "sonar-prompt-fixer",
+  "displayName": "Sonar Prompt Fixer",
+  "description": "Fetch Sonar issues, filter and select them in VS Code, and generate remediation prompts for coding agents.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sonarPromptFixer",
+          "title": "Sonar Prompt Fixer",
+          "icon": "media/sonar.svg"
+        }
+      ]
+    },
+    "views": {
+      "sonarPromptFixer": [
+        {
+          "id": "sonarPromptFixer.issues",
+          "name": "Issues",
+          "icon": "media/sonar.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sonarPromptFixer.openConfigurationEditor",
+        "title": "Sonar Prompt Fixer: Open Configuration Editor",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "sonarPromptFixer.openIssuesWorkspace",
+        "title": "Sonar Prompt Fixer: Open Issues Workspace",
+        "icon": "$(layout)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sonarPromptFixer.openConfigurationEditor",
+          "when": "view == sonarPromptFixer.issues",
+          "group": "navigation"
+        },
+        {
+          "command": "sonarPromptFixer.openIssuesWorkspace",
+          "when": "view == sonarPromptFixer.issues",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Sonar Prompt Fixer",
+      "properties": {
+        "sonarPromptFixer.connection.type": {
+          "type": "string",
+          "enum": [
+            "cloud",
+            "server"
+          ],
+          "default": "cloud",
+          "description": "Choose whether to connect to SonarQube Cloud or a self-hosted SonarQube Server."
+        },
+        "sonarPromptFixer.connection.baseUrl": {
+          "type": "string",
+          "default": "https://sonarcloud.io",
+          "description": "Base URL for the Sonar instance, for example https://sonarcloud.io or https://sonarqube.example.com."
+        },
+        "sonarPromptFixer.connection.projectKey": {
+          "type": "string",
+          "default": "",
+          "description": "Sonar project key to query."
+        },
+        "sonarPromptFixer.connection.organization": {
+          "type": "string",
+          "default": "",
+          "description": "Organization key, mainly required for SonarQube Cloud."
+        },
+        "sonarPromptFixer.connection.branch": {
+          "type": "string",
+          "default": "",
+          "description": "Optional branch name to query."
+        },
+        "sonarPromptFixer.connection.pullRequest": {
+          "type": "string",
+          "default": "",
+          "description": "Optional pull request identifier to query."
+        },
+        "sonarPromptFixer.connection.verifyTls": {
+          "type": "boolean",
+          "default": true,
+          "description": "Verify TLS certificates when calling Sonar APIs."
+        },
+        "sonarPromptFixer.connection.authMode": {
+          "type": "string",
+          "enum": [
+            "bearer",
+            "basicToken"
+          ],
+          "default": "bearer",
+          "description": "Authentication mode for self-hosted SonarQube Server."
+        },
+        "sonarPromptFixer.groupBy": {
+          "type": "string",
+          "enum": [
+            "severity",
+            "type"
+          ],
+          "default": "severity",
+          "description": "How to group issues in the tree view."
+        },
+        "sonarPromptFixer.prompt.defaultTarget": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "claude",
+            "qwen"
+          ],
+          "default": "codex",
+          "description": "Default target model for prompt rendering."
+        },
+        "sonarPromptFixer.prompt.defaultStyle": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "balanced",
+            "guided"
+          ],
+          "default": "balanced",
+          "description": "Default prompt style."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "tsc -p ./ --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/vscode": "^1.96.0",
+    "typescript": "^5.7.2",
+    "vsce": "^2.15.0"
+  }
+}
