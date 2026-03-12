@@ -131,8 +131,13 @@ The repository includes a GitHub Actions workflow at [`.github/workflows/ci.yml`
 Before the scan can run successfully, configure these GitHub repository settings:
 
 - Secret: `SONAR_TOKEN`
-- Variable: `SONAR_ORGANIZATION`
-- Variable: `SONAR_PROJECT_KEY`
+
+Project identity is read from [`sonar-project.properties`](/Users/mohamedlachgar/Dev/Git/sonar-prompt-fixer/sonar-project.properties), including:
+
+- `sonar.organization`
+- `sonar.projectKey`
+
+If `SONAR_TOKEN` is missing, the CI workflow still runs build and tests but skips the SonarQube Cloud scan with a clear log message.
 
 The workflow currently:
 
