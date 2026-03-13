@@ -11,6 +11,9 @@ type FindingsSummaryMessage = {
   type: 'selectProfile';
   profileId: string;
 } | {
+  type: 'selectProject';
+  projectPath: string;
+} | {
   type: 'refresh';
 };
 
@@ -42,6 +45,14 @@ export class FindingsSummaryView implements vscode.WebviewViewProvider {
         return;
       }
 
+      if (message.type === 'selectProject') {
+        await this.connectionState.selectProject(message.projectPath);
+        await this.issuesProvider.reloadFindings();
+        await this.issuesWorkspaceEditor.reloadData();
+        this.update();
+        return;
+      }
+
       if (message.type === 'refresh') {
         await this.issuesProvider.reloadFindings();
         await this.issuesWorkspaceEditor.reloadData();
@@ -57,17 +68,28 @@ export class FindingsSummaryView implements vscode.WebviewViewProvider {
     }
 
     const activeProfile = this.connectionState.getActiveProfile();
+    const activeConnection = activeProfile ? this.connectionState.getConnection() : undefined;
+    const activeProject = this.connectionState.getActiveProject();
+    const hasSummary = this.issuesProvider.hasLoadedData() && !this.issuesProvider.isLoading() && Boolean(activeProfile);
     const payload = {
       loading: this.issuesProvider.isLoading(),
-      activeProfileName: activeProfile.name,
-      activeProfileTarget: activeProfile.connection.projectKey || activeProfile.connection.baseUrl,
-      activeProfileId: activeProfile.id,
+      hasSummary,
+      activeProfileName: activeProfile?.name ?? '',
+      activeProfileTarget: activeConnection?.projectKey || activeProfile?.connection.baseUrl || '',
+      activeProfileId: activeProfile?.id ?? '',
+      activeProjectPath: activeProject?.directory ?? '',
+      activeProjectLabel: activeProject?.label ?? '',
       profiles: this.connectionState.getProfiles().map((profile) => ({
         id: profile.id,
         name: profile.name,
-        target: profile.connection.projectKey || profile.connection.baseUrl
+        target: profile.connection.baseUrl
       })),
-      counts: [
+      projects: this.connectionState.getProjects().map((project) => ({
+        path: project.directory,
+        label: project.label,
+        projectKey: project.projectKey
+      })),
+      counts: hasSummary ? [
         {
           mode: 'issues' as const,
           label: 'Issues',
@@ -92,7 +114,7 @@ export class FindingsSummaryView implements vscode.WebviewViewProvider {
           count: this.issuesProvider.getHotspots().length,
           accent: '#dc2626'
         }
-      ]
+      ] : []
     };
 
     this.view.webview.html = renderFindingsSummaryHtml(this.view.webview, payload);

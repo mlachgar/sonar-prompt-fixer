@@ -1,15 +1,19 @@
 import { randomBytes } from 'node:crypto';
-import { SonarConnection, SonarConnectionProfile } from '../sonar/types';
+import { SonarConnectionProfile, SonarProfileConnection } from '../sonar/types';
+import { SonarProjectProperties } from '../util/sonarProjectProperties';
+import { SonarWorkspaceProject } from '../util/sonarWorkspaceProjects';
 
 type ConfigurationEditorModel = {
   profiles: Array<{
     id: string;
     name: string;
-    type: SonarConnection['type'];
+    type: SonarProfileConnection['type'];
     baseUrl: string;
-    projectKey: string;
   }>;
-  activeProfile: SonarConnectionProfile;
+  activeProfile?: SonarConnectionProfile;
+  defaultConnection: SonarProfileConnection;
+  activeProject?: SonarWorkspaceProject;
+  projectConfiguration: SonarProjectProperties;
   hasToken: boolean;
   token: string;
   statusMessage: string;
@@ -129,6 +133,20 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       .panelBody {
         padding: 0 20px 20px;
       }
+      .profileToolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 18px;
+      }
+      .profileToolbarActions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        align-self: start;
+        padding-top: 24px;
+      }
       .fields {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -165,12 +183,21 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       }
       .actions {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 10px;
-        margin-top: 18px;
       }
-      .profileActions {
-        margin-top: 10px;
+      .formFooter {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        margin-top: 20px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      .viewNote {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 12px;
       }
       button {
         border: 1px solid transparent;
@@ -234,8 +261,27 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         .grid {
           grid-template-columns: 1fr;
         }
+        .profileToolbar {
+          grid-template-columns: 1fr;
+        }
+        .profileToolbarActions {
+          justify-content: stretch;
+          padding-top: 0;
+        }
+        .profileToolbarActions button {
+          flex: 1;
+        }
         .fields {
           grid-template-columns: 1fr;
+        }
+        .formFooter {
+          justify-content: stretch;
+        }
+        .actions {
+          width: 100%;
+        }
+        .actions button {
+          flex: 1 1 0;
         }
         .hero {
           flex-direction: column;
@@ -250,7 +296,7 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         <div>
           <div class="eyebrow">Sonar Prompt Fixer</div>
           <h1>Connection Workspace</h1>
-          <p class="lead">Save multiple SonarQube Cloud and Server profiles, keep a token per profile, and switch the active connection without rewriting settings each time.</p>
+          <p class="lead">Save multiple SonarQube Cloud and Server profiles, keep a token per profile, and let each workspace provide its project key from <code>sonar-project.properties</code>.</p>
         </div>
         <aside class="heroCard">
           <strong id="tokenHeadline">Token missing</strong>
@@ -265,12 +311,18 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
             <span class="badge" id="modeBadge">Cloud mode</span>
           </div>
           <div class="panelBody">
-            <div class="fields">
-              <label class="full">
+            <div class="profileToolbar">
+              <label>
                 Editing profile
                 <select id="profileSelect"></select>
-                <span class="hint">Choose which saved profile you want to edit in this form.</span>
+                <span class="hint">Only saved profiles appear here. Use New Profile to create one.</span>
               </label>
+              <div class="profileToolbarActions">
+                <button id="newProfile">New Profile</button>
+                <button class="danger" id="deleteProfile">Delete Profile</button>
+              </div>
+            </div>
+            <div class="fields">
               <label class="full">
                 Profile name
                 <input id="profileName" type="text" placeholder="Production Cloud" />
@@ -285,14 +337,6 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
               <label>
                 Base URL
                 <input id="baseUrl" type="text" placeholder="https://sonarcloud.io" />
-              </label>
-              <label>
-                Project key
-                <input id="projectKey" type="text" placeholder="my-org_my-project" />
-              </label>
-              <label>
-                Organization
-                <input id="organization" type="text" placeholder="Required for most cloud setups" />
               </label>
               <label>
                 Branch
@@ -324,14 +368,13 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
                 <span class="hint">Each saved profile can keep its own token. Clear the field and save to remove it.</span>
               </label>
             </div>
-            <div class="actions profileActions">
-              <button id="newProfile">New Profile</button>
-              <button class="danger" id="deleteProfile">Delete Profile</button>
+            <div class="formFooter">
+              <div class="actions">
+                <button id="testConnection">Test Connection</button>
+                <button class="primary" id="saveProfile">Save Profile</button>
+              </div>
             </div>
-            <div class="actions">
-              <button class="primary" id="saveProfile">Save Profile</button>
-              <button id="testConnection">Test Connection</button>
-            </div>
+            <div class="viewNote">Save makes this profile available across workspaces. Test Connection validates the current form against the detected project.</div>
           </div>
         </article>
 
@@ -350,9 +393,21 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
             </div>
             <div class="panelBody">
               <ul class="bulletList">
-                <li>Each profile stores its own Sonar connection details and can be made active instantly.</li>
+                <li>Each profile stores only server-level connection details and can be made active instantly.</li>
                 <li>Tokens stay in VS Code SecretStorage instead of normal settings.</li>
-                <li>Profiles are the only connection source used by the extension.</li>
+                <li>The current workspace supplies <code>sonar.projectKey</code> and <code>sonar.organization</code> from <code>sonar-project.properties</code>.</li>
+              </ul>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panelHeader">
+              <h2>Detected Project</h2>
+            </div>
+            <div class="panelBody">
+              <ul class="bulletList">
+                <li id="detectedProjectDirectory">Project directory: not selected</li>
+                <li id="detectedProjectKey">Project key: not found</li>
+                <li id="detectedOrganization">Organization: not found</li>
               </ul>
             </div>
           </section>
@@ -367,8 +422,6 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       const profileName = document.getElementById('profileName');
       const connectionType = document.getElementById('connectionType');
       const baseUrl = document.getElementById('baseUrl');
-      const projectKey = document.getElementById('projectKey');
-      const organization = document.getElementById('organization');
       const branch = document.getElementById('branch');
       const pullRequest = document.getElementById('pullRequest');
       const authMode = document.getElementById('authMode');
@@ -378,6 +431,9 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       const tokenHeadline = document.getElementById('tokenHeadline');
       const tokenSubline = document.getElementById('tokenSubline');
       const modeBadge = document.getElementById('modeBadge');
+      const detectedProjectDirectory = document.getElementById('detectedProjectDirectory');
+      const detectedProjectKey = document.getElementById('detectedProjectKey');
+      const detectedOrganization = document.getElementById('detectedOrganization');
       const deleteProfileButton = document.getElementById('deleteProfile');
       let currentProfileId = '';
 
@@ -385,16 +441,7 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         return {
           id: '',
           name: '',
-          connection: {
-            type: 'cloud',
-            baseUrl: 'https://sonarcloud.io',
-            projectKey: '',
-            organization: '',
-            branch: '',
-            pullRequest: '',
-            authMode: 'bearer',
-            verifyTls: true
-          },
+          connection: structuredClone(model.defaultConnection),
           token: ''
         };
       }
@@ -406,8 +453,6 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
           connection: {
             type: connectionType.value,
             baseUrl: baseUrl.value,
-            projectKey: projectKey.value,
-            organization: organization.value,
             branch: branch.value,
             pullRequest: pullRequest.value,
             authMode: authMode.value,
@@ -422,17 +467,14 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
         profileName.value = draft.name || '';
         connectionType.value = draft.connection.type || 'cloud';
         baseUrl.value = draft.connection.baseUrl || '';
-        projectKey.value = draft.connection.projectKey || '';
-        organization.value = draft.connection.organization || '';
         branch.value = draft.connection.branch || '';
         pullRequest.value = draft.connection.pullRequest || '';
         authMode.value = draft.connection.authMode || 'bearer';
         verifyTls.value = String(draft.connection.verifyTls !== false);
         token.value = draft.token || '';
-        organization.disabled = connectionType.value !== 'cloud';
         authMode.disabled = connectionType.value !== 'server';
         modeBadge.textContent = connectionType.value === 'cloud' ? 'Cloud mode' : 'Server mode';
-        deleteProfileButton.disabled = !currentProfileId || currentProfileId === '__default__';
+        deleteProfileButton.disabled = !currentProfileId;
       }
 
       function renderProfileOptions(data) {
@@ -443,23 +485,35 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
           option.textContent = profile.name;
           profileSelect.appendChild(option);
         });
-        profileSelect.value = data.activeProfile.id;
+        profileSelect.disabled = data.profiles.length === 0;
+        if (data.activeProfile) {
+          profileSelect.value = data.activeProfile.id;
+        }
       }
 
       function render(data) {
         renderProfileOptions(data);
-        syncForm({
+        syncForm(data.activeProfile ? {
           id: data.activeProfile.id,
           name: data.activeProfile.name,
           connection: data.activeProfile.connection,
           token: data.token || ''
-        });
+        } : makeBlankDraft());
         status.className = 'status ' + data.statusKind;
         status.textContent = data.statusMessage;
         tokenHeadline.textContent = data.hasToken ? 'Token stored' : 'Token missing';
         tokenSubline.textContent = data.hasToken
           ? 'This active profile already has a token available for requests.'
           : 'Save a token in SecretStorage to start fetching issues.';
+        detectedProjectDirectory.textContent = data.activeProject
+          ? 'Project directory: ' + data.activeProject.label
+          : 'Project directory: not selected';
+        detectedProjectKey.textContent = data.projectConfiguration.projectKey
+          ? 'Project key: ' + data.projectConfiguration.projectKey
+          : 'Project key: not found in sonar-project.properties';
+        detectedOrganization.textContent = data.projectConfiguration.organization
+          ? 'Organization: ' + data.projectConfiguration.organization
+          : 'Organization: not found';
       }
 
       document.getElementById('newProfile').addEventListener('click', () => {
@@ -491,7 +545,7 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
       });
 
       document.getElementById('deleteProfile').addEventListener('click', () => {
-        if (!currentProfileId || currentProfileId === '__default__') {
+        if (!currentProfileId) {
           return;
         }
         vscode.postMessage({ type: 'deleteProfile', profileId: currentProfileId });
@@ -503,7 +557,6 @@ export function renderConfigurationEditorHtml(webview: import('vscode').Webview,
 
       connectionType.addEventListener('change', () => {
         modeBadge.textContent = connectionType.value === 'cloud' ? 'Cloud mode' : 'Server mode';
-        organization.disabled = connectionType.value !== 'cloud';
         authMode.disabled = connectionType.value !== 'server';
       });
 

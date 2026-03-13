@@ -1,35 +1,99 @@
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
-import { SonarConnection, SonarConnectionProfile } from '../sonar/types';
+import { SonarConnection, SonarConnectionProfile, SonarProfileConnection } from '../sonar/types';
 import { deleteToken, loadStoredToken, loadToken, storeToken } from '../util/secrets';
-import { loadSonarProjectProperties } from '../util/sonarProjectProperties';
+import { SonarProjectProperties } from '../util/sonarProjectProperties';
+import { discoverSonarWorkspaceProjects, SonarWorkspaceProject } from '../util/sonarWorkspaceProjects';
 
 const PROFILES_SECTION = 'connections.profiles';
 const ACTIVE_PROFILE_SECTION = 'connections.activeProfileId';
-const EMPTY_PROFILE_ID = '__default__';
-const EMPTY_PROFILE_NAME = 'New Connection';
+const ACTIVE_PROJECT_SECTION = 'projects.activeProjectPath';
+const DEFAULT_PROFILE_CONNECTION: SonarProfileConnection = {
+  type: 'cloud',
+  baseUrl: 'https://sonarcloud.io',
+  branch: undefined,
+  pullRequest: undefined,
+  verifyTls: true,
+  authMode: 'bearer'
+};
 
 export class ConnectionState {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
   public readonly onDidChange = this.onDidChangeEmitter.event;
   private profiles: SonarConnectionProfile[];
   private activeProfileId: string;
+  private activeProjectPath: string;
 
   public constructor(private readonly context: vscode.ExtensionContext) {
     this.profiles = this.readStoredProfiles();
     this.activeProfileId = this.readActiveProfileId(this.profiles);
+    this.activeProjectPath = this.readActiveProjectPath();
   }
 
   public getConnection(): SonarConnection {
-    return this.getActiveProfile().connection;
+    return this.resolveConnection();
+  }
+
+  public hasSavedProfiles(): boolean {
+    return this.profiles.length > 0;
+  }
+
+  public getProjectConfiguration(): SonarProjectProperties {
+    const activeProject = this.getActiveProject();
+    if (!activeProject) {
+      return {};
+    }
+
+    return {
+      projectKey: activeProject.projectKey,
+      organization: activeProject.organization
+    };
+  }
+
+  public resolveConnection(connection?: SonarProfileConnection): SonarConnection {
+    const activeConnection = connection ?? this.getActiveProfile()?.connection ?? this.getDefaultProfileConnection();
+    const projectConfiguration = this.getProjectConfiguration();
+
+    return {
+      ...normalizeConnection(activeConnection),
+      projectKey: projectConfiguration.projectKey || '',
+      organization: projectConfiguration.organization || undefined
+    };
+  }
+
+  public getProjects(): SonarWorkspaceProject[] {
+    return discoverSonarWorkspaceProjects(this.context.extensionPath);
+  }
+
+  public getActiveProjectPath(): string {
+    const activeProject = this.getActiveProject();
+    return activeProject?.directory ?? '';
+  }
+
+  public getActiveProject(): SonarWorkspaceProject | undefined {
+    const projects = this.getProjects();
+    if (projects.length === 0) {
+      return undefined;
+    }
+
+    return projects.find((project) => project.directory === this.activeProjectPath) ?? projects[0];
+  }
+
+  public async ensureActiveProjectSelection(): Promise<void> {
+    const projects = this.getProjects();
+    if (projects.length === 0) {
+      return;
+    }
+
+    if (projects.some((project) => project.directory === this.activeProjectPath)) {
+      return;
+    }
+
+    await this.setActiveProjectPath(projects[0].directory, false);
   }
 
   public getProfiles(): SonarConnectionProfile[] {
-    if (this.profiles.length > 0) {
-      return [...this.profiles];
-    }
-
-    return [this.getDefaultProfile()];
+    return [...this.profiles];
   }
 
   public getActiveProfileId(): string {
@@ -37,24 +101,28 @@ export class ConnectionState {
       return this.activeProfileId;
     }
 
-    return this.getProfiles()[0].id;
+    return this.profiles[0]?.id ?? '';
   }
 
-  public getActiveProfile(): SonarConnectionProfile {
+  public getActiveProfile(): SonarConnectionProfile | undefined {
     const activeProfileId = this.getActiveProfileId();
-    return this.getProfiles().find((profile) => profile.id === activeProfileId) ?? this.getProfiles()[0];
+    return this.profiles.find((profile) => profile.id === activeProfileId) ?? this.profiles[0];
+  }
+
+  public getDefaultProfileConnection(): SonarProfileConnection {
+    return { ...DEFAULT_PROFILE_CONNECTION };
   }
 
   public async getToken(profileId?: string): Promise<string | undefined> {
     const activeProfileId = profileId ?? this.getActiveProfileId();
-    if (activeProfileId !== EMPTY_PROFILE_ID) {
+    if (activeProfileId) {
       const storedToken = await loadStoredToken(this.context.secrets, activeProfileId);
       if (storedToken) {
         return storedToken;
       }
     }
 
-    return loadToken(this.context.secrets, this.context.extensionPath, activeProfileId === EMPTY_PROFILE_ID ? undefined : activeProfileId);
+    return loadToken(this.context.secrets, this.context.extensionPath, activeProfileId || undefined);
   }
 
   public async updateSetting<T>(section: string, value: T): Promise<void> {
@@ -64,15 +132,16 @@ export class ConnectionState {
   }
 
   public async saveProfile(
-    profile: Partial<SonarConnectionProfile> & { connection: SonarConnection },
+    profile: Partial<SonarConnectionProfile> & { connection: SonarProfileConnection },
     token: string
   ): Promise<SonarConnectionProfile> {
     const config = vscode.workspace.getConfiguration('sonarPromptFixer');
     const profiles = this.profiles;
+    const normalizedConnection = normalizeConnection(profile.connection);
     const nextProfile: SonarConnectionProfile = {
       id: profile.id?.trim() || randomUUID(),
-      name: profile.name?.trim() || inferProfileName(profile.connection),
-      connection: normalizeConnection(profile.connection)
+      name: profile.name?.trim() || inferProfileName(normalizedConnection),
+      connection: normalizedConnection
     };
     const existingIndex = profiles.findIndex((item) => item.id === nextProfile.id);
     const nextProfiles = [...profiles];
@@ -110,6 +179,15 @@ export class ConnectionState {
     this.onDidChangeEmitter.fire();
   }
 
+  public async selectProject(projectPath: string): Promise<void> {
+    const project = this.getProjects().find((candidate) => candidate.directory === projectPath);
+    if (!project) {
+      return;
+    }
+
+    await this.setActiveProjectPath(project.directory, true);
+  }
+
   public async deleteProfile(profileId: string): Promise<void> {
     const nextProfiles = this.profiles.filter((profile) => profile.id !== profileId);
     if (nextProfiles.length === this.profiles.length) {
@@ -131,6 +209,25 @@ export class ConnectionState {
   }
 
   public notifyChanged(): void {
+    this.onDidChangeEmitter.fire();
+  }
+
+  public async resetConnectionsAndProjects(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('sonarPromptFixer');
+
+    for (const profile of this.profiles) {
+      await deleteToken(this.context.secrets, profile.id);
+    }
+
+    this.profiles = [];
+    this.activeProfileId = '';
+    this.activeProjectPath = '';
+
+    await config.update(PROFILES_SECTION, [], vscode.ConfigurationTarget.Global);
+    await config.update(ACTIVE_PROFILE_SECTION, '', vscode.ConfigurationTarget.Global);
+    await config.update(ACTIVE_PROJECT_SECTION, '', vscode.ConfigurationTarget.Workspace);
+
+    await this.ensureActiveProjectSelection();
     this.onDidChangeEmitter.fire();
   }
 
@@ -156,22 +253,18 @@ export class ConnectionState {
     return profiles[0]?.id ?? '';
   }
 
-  private getDefaultProfile(): SonarConnectionProfile {
-    const fallbackProperties = loadSonarProjectProperties(this.context.extensionPath);
-    return {
-      id: EMPTY_PROFILE_ID,
-      name: EMPTY_PROFILE_NAME,
-      connection: {
-        type: 'cloud',
-        baseUrl: 'https://sonarcloud.io',
-        projectKey: fallbackProperties.projectKey || '',
-        organization: fallbackProperties.organization || undefined,
-        branch: undefined,
-        pullRequest: undefined,
-        verifyTls: true,
-        authMode: 'bearer'
-      }
-    };
+  private readActiveProjectPath(): string {
+    const config = vscode.workspace.getConfiguration('sonarPromptFixer');
+    return config.get<string>(ACTIVE_PROJECT_SECTION, '').trim();
+  }
+
+  private async setActiveProjectPath(projectPath: string, emitChange: boolean): Promise<void> {
+    const config = vscode.workspace.getConfiguration('sonarPromptFixer');
+    this.activeProjectPath = projectPath;
+    await config.update(ACTIVE_PROJECT_SECTION, projectPath, vscode.ConfigurationTarget.Workspace);
+    if (emitChange) {
+      this.onDidChangeEmitter.fire();
+    }
   }
 }
 
@@ -196,7 +289,7 @@ function sanitizeStoredProfile(rawProfile: unknown): SonarConnectionProfile | un
   };
 }
 
-function sanitizeConnection(rawConnection: unknown): SonarConnection | undefined {
+function sanitizeConnection(rawConnection: unknown): SonarProfileConnection | undefined {
   if (!rawConnection || typeof rawConnection !== 'object') {
     return undefined;
   }
@@ -209,8 +302,6 @@ function sanitizeConnection(rawConnection: unknown): SonarConnection | undefined
     type = 'cloud';
   }
   const baseUrl = typeof candidate.baseUrl === 'string' ? candidate.baseUrl.trim() : '';
-  const projectKey = typeof candidate.projectKey === 'string' ? candidate.projectKey.trim() : '';
-  const organization = typeof candidate.organization === 'string' ? candidate.organization.trim() : '';
   const branch = typeof candidate.branch === 'string' ? candidate.branch.trim() : '';
   const pullRequest = typeof candidate.pullRequest === 'string' ? candidate.pullRequest.trim() : '';
   const verifyTls = typeof candidate.verifyTls === 'boolean' ? candidate.verifyTls : true;
@@ -223,8 +314,6 @@ function sanitizeConnection(rawConnection: unknown): SonarConnection | undefined
   return {
     type,
     baseUrl,
-    projectKey,
-    organization: organization || undefined,
     branch: branch || undefined,
     pullRequest: pullRequest || undefined,
     verifyTls,
@@ -232,12 +321,10 @@ function sanitizeConnection(rawConnection: unknown): SonarConnection | undefined
   };
 }
 
-function normalizeConnection(connection: SonarConnection): SonarConnection {
+function normalizeConnection(connection: SonarProfileConnection): SonarProfileConnection {
   return {
     type: connection.type,
     baseUrl: connection.baseUrl.trim(),
-    projectKey: connection.projectKey.trim(),
-    organization: connection.organization?.trim() || undefined,
     branch: connection.branch?.trim() || undefined,
     pullRequest: connection.pullRequest?.trim() || undefined,
     verifyTls: connection.verifyTls ?? true,
@@ -245,7 +332,7 @@ function normalizeConnection(connection: SonarConnection): SonarConnection {
   };
 }
 
-function inferProfileName(connection: SonarConnection): string {
-  const base = connection.projectKey || connection.baseUrl || 'Sonar Connection';
+function inferProfileName(connection: SonarProfileConnection): string {
+  const base = connection.baseUrl || 'Sonar Connection';
   return connection.type === 'cloud' ? `${base} (Cloud)` : `${base} (Server)`;
 }

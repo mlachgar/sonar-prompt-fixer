@@ -57,10 +57,12 @@ export type SonarConnection = {
   authMode?: 'bearer' | 'basicToken';
 };
 
+export type SonarProfileConnection = Omit<SonarConnection, 'projectKey' | 'organization'>;
+
 export type SonarConnectionProfile = {
   id: string;
   name: string;
-  connection: SonarConnection;
+  connection: SonarProfileConnection;
 };
 
 export type IssueFilters = {

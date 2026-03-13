@@ -401,7 +401,7 @@ describe('target-specific prompt renderers', () => {
   it('renders the codex prompt', () => {
     const output = renderCodexPrompt(input);
     expect(output).toContain('You are fixing Sonar findings in this repository.');
-    expect(output).toContain('Goal: Resolve the folowing Sonar findings for workspace "sonar-prompt-fixer"');
+    expect(output).toContain('Goal: Resolve the folowing Sonar findings for project "sonar-prompt-fixer"');
     expect(output).toContain('Deliverables:');
   });
 

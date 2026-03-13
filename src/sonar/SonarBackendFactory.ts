@@ -6,7 +6,7 @@ import { ConfigurationError } from '../util/errors';
 
 export function createSonarBackend(connection: SonarConnection, token: string | undefined): SonarBackend {
   if (!connection.baseUrl || !connection.projectKey) {
-    throw new ConfigurationError('Configure the Sonar base URL and project key first.');
+    throw new ConfigurationError('Configure the Sonar base URL and make sure sonar-project.properties defines sonar.projectKey.');
   }
 
   if (!token) {

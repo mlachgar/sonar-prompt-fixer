@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { registerOpenConfigurationEditorCommand } from './commands/openConfigurationEditor';
 import { registerOpenIssuesWorkspaceCommand } from './commands/openIssuesWorkspace';
+import { registerResetStateCommand } from './commands/resetState';
 import { createSonarBackend } from './sonar/SonarBackendFactory';
 import { SonarIssuesProvider } from './providers/SonarIssuesProvider';
 import { ConnectionState } from './state/ConnectionState';
@@ -33,6 +34,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   registerOpenConfigurationEditorCommand(context, configurationEditor);
   registerOpenIssuesWorkspaceCommand(context, issuesWorkspaceEditor);
+  registerResetStateCommand(context, connectionState);
 
   context.subscriptions.push(
     filterState.onDidChange(() => {
@@ -54,11 +56,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     issuesProvider.onDidChangeIssues(() => {
       issuesWorkspaceEditor.update();
       findingsSummaryView.update();
+    }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      void refreshDiscoveryAndPreload(
+        connectionState,
+        configurationEditor,
+        issuesProvider,
+        issuesWorkspaceEditor,
+        findingsSummaryView
+      );
     })
   );
 
-  void configurationEditor.initialize();
-  void preloadActiveProfileFindings(connectionState, issuesProvider, findingsSummaryView);
+  void refreshDiscoveryAndPreload(
+    connectionState,
+    configurationEditor,
+    issuesProvider,
+    issuesWorkspaceEditor,
+    findingsSummaryView
+  );
   queueOnboarding(context);
 }
 
@@ -97,7 +113,7 @@ async function preloadActiveProfileFindings(
   findingsSummaryView: FindingsSummaryView
 ): Promise<void> {
   const activeProfile = connectionState.getActiveProfile();
-  if (activeProfile.id === '__default__') {
+  if (!activeProfile) {
     return;
   }
 
@@ -111,5 +127,60 @@ async function preloadActiveProfileFindings(
   }
 
   findingsSummaryView.update();
-  void issuesProvider.loadFindings();
+  if (!issuesProvider.hasLoadedData()) {
+    void issuesProvider.loadFindings();
+  }
+}
+
+async function refreshDiscoveryAndPreload(
+  connectionState: ConnectionState,
+  configurationEditor: ConfigurationEditor,
+  issuesProvider: SonarIssuesProvider,
+  issuesWorkspaceEditor: IssuesWorkspaceEditor,
+  findingsSummaryView: FindingsSummaryView
+): Promise<void> {
+  await connectionState.ensureActiveProjectSelection();
+  await configurationEditor.initialize();
+  await maybeSuggestSonarCloudProfile(connectionState);
+  await issuesProvider.reloadFindings();
+  await issuesWorkspaceEditor.reloadData();
+  await preloadActiveProfileFindings(connectionState, issuesProvider, findingsSummaryView);
+  configurationEditor.update();
+  findingsSummaryView.update();
+}
+
+async function maybeSuggestSonarCloudProfile(connectionState: ConnectionState): Promise<void> {
+  if (connectionState.hasSavedProfiles()) {
+    return;
+  }
+
+  const token = await connectionState.getToken();
+  if (!token) {
+    return;
+  }
+
+  try {
+    const backend = createSonarBackend(
+      connectionState.resolveConnection(connectionState.getDefaultProfileConnection()),
+      token
+    );
+    const result = await backend.testConnection();
+    if (!result.ok) {
+      return;
+    }
+
+    const action = await vscode.window.showInformationMessage(
+      'A SonarCloud connection was detected. Save it as a reusable connection?',
+      'Save SonarCloud'
+    );
+
+    if (action === 'Save SonarCloud' && !connectionState.hasSavedProfiles()) {
+      await connectionState.saveProfile({
+        name: 'SonarCloud',
+        connection: connectionState.getDefaultProfileConnection()
+      }, token);
+    }
+  } catch {
+    return;
+  }
 }

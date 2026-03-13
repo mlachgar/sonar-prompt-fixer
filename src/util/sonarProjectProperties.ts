@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-type SonarProjectProperties = {
+export type SonarProjectProperties = {
   projectKey?: string;
   organization?: string;
 };
