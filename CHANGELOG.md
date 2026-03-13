@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 0.0.2
 
 - Refactored saved Sonar profiles to store only server-level connection settings.
 - Resolved `projectKey` and `organization` from workspace `sonar-project.properties` files at runtime.

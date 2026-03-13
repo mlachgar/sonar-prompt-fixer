@@ -2,6 +2,14 @@
 
 Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a self-hosted SonarQube Server, fetches project findings, and generates remediation prompts for coding agents such as Codex, Claude Code, and Qwen Code. The main workflow lives in a dedicated Sonar Workspace, while the sidebar provides a lightweight Findings summary.
 
+## What's New In 0.0.2
+
+- Reusable saved connection profiles now keep only server-level settings.
+- Workspace projects are discovered automatically from `sonar-project.properties` files at the repository root and one level below.
+- Multi-project repositories can switch the active Sonar project directly from the Findings sidebar.
+- When no profile exists yet, the extension can detect a valid SonarCloud connection and offer to save it as `SonarCloud`.
+- Findings summary cards stay hidden until data has loaded, which keeps the sidebar cleaner during startup and refresh.
+
 ## What You Get
 
 - Connect to SonarQube Cloud or SonarQube Server from inside VS Code
