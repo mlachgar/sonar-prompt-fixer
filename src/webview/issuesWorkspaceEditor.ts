@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { buildCanonicalPromptInput } from '../prompt/buildCanonicalPrompt';
 import { renderPrompt } from '../prompt/renderPrompt';
 import { PromptStyle, PromptTarget } from '../prompt/types';
@@ -110,6 +111,7 @@ export class IssuesWorkspaceEditor {
 
   public async generatePrompt(): Promise<string> {
     const connection = this.connectionState.getConnection();
+    const repositoryName = this.getRepositoryName();
     const input = buildCanonicalPromptInput(this.getPromptSelection(), this.target, this.style, {
       type: connection.type,
       baseUrl: connection.baseUrl,
@@ -119,10 +121,28 @@ export class IssuesWorkspaceEditor {
       pullRequest: connection.pullRequest,
       verifyTls: connection.verifyTls,
       authMode: connection.authMode
-    });
+    }, repositoryName);
     this.currentPrompt = renderPrompt(input);
     this.update();
     return this.currentPrompt;
+  }
+
+  private getRepositoryName(): string | undefined {
+    if (vscode.workspace.name) {
+      return vscode.workspace.name;
+    }
+
+    const workspaceFolderPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (workspaceFolderPath) {
+      return path.basename(workspaceFolderPath);
+    }
+
+    const workspaceFilePath = vscode.workspace.workspaceFile?.fsPath;
+    if (workspaceFilePath) {
+      return path.basename(workspaceFilePath, path.extname(workspaceFilePath));
+    }
+
+    return undefined;
   }
 
   public getCurrentPrompt(): string {

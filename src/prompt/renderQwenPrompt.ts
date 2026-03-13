@@ -3,17 +3,20 @@ import {
   getSourceDeliverables,
   getSourceExecutionRules,
   getSourceHeading,
+  hasMixedSelections,
   renderSelectionList,
   renderSharedConstraints
 } from './renderShared';
 
 export function renderQwenPrompt(input: CanonicalPromptInput): string {
+  const heading = getSourceHeading(input);
+
   return [
     getQwenIntro(input),
     '',
     getQwenGoal(input),
     '',
-    getSourceHeading(input),
+    ...(heading ? [heading] : []),
     renderSelectionList(input),
     '',
     renderSharedConstraints(input.style),
@@ -26,48 +29,44 @@ export function renderQwenPrompt(input: CanonicalPromptInput): string {
   ].join('\n');
 }
 
+function getRepositoryContext(input: CanonicalPromptInput): string {
+  return input.repositoryName ? ` for workspace "${input.repositoryName}"` : '';
+}
+
 function getQwenIntro(input: CanonicalPromptInput): string {
   if (hasMixedSelections(input)) {
-    return 'Task: address the selected Sonar items across all active workspace modes in the current repository.';
+    return 'Task: improve this repository by fixing the selected Sonar findings.';
   }
 
   switch (input.source) {
     case 'coverage':
-      return 'Task: add tests for the selected coverage gaps in the current repository.';
+      return 'Task: add tests for the selected coverage gaps in this repository.';
     case 'duplication':
-      return 'Task: reduce the selected code duplication in the current repository.';
+      return 'Task: reduce the selected code duplication in this repository.';
     case 'hotspots':
-      return 'Task: fix the selected security hotspots in the current repository.';
+      return 'Task: fix the selected security hotspots in this repository.';
     case 'issues':
     default:
-      return 'Task: fix the selected Sonar issues in the current repository.';
+      return 'Task: fix the selected Sonar findings in this repository.';
   }
 }
 
 function getQwenGoal(input: CanonicalPromptInput): string {
+  const repositoryContext = getRepositoryContext(input);
+
   if (hasMixedSelections(input)) {
-    return `Primary goal: address the selected Sonar issues, coverage gaps, duplication targets, and security hotspots for project "${input.connection.projectKey}" with low-risk, localized edits.`;
+    return `Primary goal: address the selected Sonar issues, coverage gaps, duplication targets, and security hotspots${repositoryContext} with low-risk, localized edits.`;
   }
 
   switch (input.source) {
     case 'coverage':
-      return `Primary goal: increase coverage for project "${input.connection.projectKey}" with targeted tests and minimal production edits.`;
+      return `Primary goal: increase coverage${repositoryContext} with targeted tests and minimal production edits.`;
     case 'duplication':
-      return `Primary goal: reduce duplication for project "${input.connection.projectKey}" with low-risk, localized refactors.`;
+      return `Primary goal: reduce duplication${repositoryContext} with low-risk, localized refactors.`;
     case 'hotspots':
-      return `Primary goal: address the selected security hotspots for project "${input.connection.projectKey}" with low-risk, localized edits.`;
+      return `Primary goal: address the selected security hotspots${repositoryContext} with low-risk, localized edits.`;
     case 'issues':
     default:
-      return `Primary goal: address the findings for project "${input.connection.projectKey}" with low-risk, localized edits.`;
+      return `Primary goal: address the findings${repositoryContext} with low-risk, localized edits.`;
   }
-}
-
-function hasMixedSelections(input: CanonicalPromptInput): boolean {
-  return (input.issues?.length ?? 0) > 0 &&
-    ((input.coverageTargets?.length ?? 0) > 0 ||
-      (input.duplicationTargets?.length ?? 0) > 0 ||
-      (input.hotspots?.length ?? 0) > 0) ||
-    ((input.coverageTargets?.length ?? 0) > 0 &&
-      ((input.duplicationTargets?.length ?? 0) > 0 || (input.hotspots?.length ?? 0) > 0)) ||
-    ((input.duplicationTargets?.length ?? 0) > 0 && (input.hotspots?.length ?? 0) > 0);
 }

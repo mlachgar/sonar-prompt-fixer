@@ -16,6 +16,7 @@ export type CanonicalPromptInput = {
   target: PromptTarget;
   style: PromptStyle;
   connection: SonarConnection;
+  repositoryName?: string;
   generatedAt: string;
   source: PromptSource;
   issues?: SonarIssue[];

@@ -36,38 +36,40 @@ function getStyleLine(style: CanonicalPromptInput['style']): string {
 }
 
 export function getSourceGoal(input: CanonicalPromptInput): string {
+  const repositoryContext = getRepositoryContext(input);
+
   if (hasMixedSelections(input)) {
-    return `Goal: Address the selected Sonar items for project "${input.connection.projectKey}" across issues, coverage, duplication, and security hotspots with minimal, safe code changes.`;
+    return `Goal: Address the selected Sonar items${repositoryContext} across issues, coverage, duplication, and security hotspots with minimal, safe code changes.`;
   }
 
   switch (getPrimarySource(input)) {
     case 'coverage':
-      return `Goal: Add tests for project "${input.connection.projectKey}" that cover the selected uncovered lines and branches with minimal production-code changes.`;
+      return `Goal: Add tests${repositoryContext} that cover the selected uncovered lines and branches with minimal production-code changes.`;
     case 'duplication':
-      return `Goal: Reduce the selected code duplications for project "${input.connection.projectKey}" with minimal, safe refactors that preserve behavior.`;
+      return `Goal: Reduce the selected code duplications${repositoryContext} with minimal, safe refactors that preserve behavior.`;
     case 'hotspots':
-      return `Goal: Review and remediate the selected security hotspots for project "${input.connection.projectKey}" with minimal, safe code changes.`;
+      return `Goal: Review and remediate the selected security hotspots${repositoryContext} with minimal, safe code changes.`;
     case 'issues':
     default:
-      return `Goal: Resolve the selected Sonar findings for project "${input.connection.projectKey}" with minimal, safe code changes.`;
+      return `Goal: Resolve the folowing Sonar findings${repositoryContext} with minimal, safe code changes.`;
   }
 }
 
 export function getSourceHeading(input: CanonicalPromptInput): string {
   if (hasMixedSelections(input)) {
-    return 'Selected items across modes:';
+    return '';
   }
 
   switch (getPrimarySource(input)) {
     case 'coverage':
-      return 'Coverage targets:';
+      return 'Coverage to fix:';
     case 'duplication':
-      return 'Duplication targets:';
+      return 'Duplication to fix:';
     case 'hotspots':
-      return 'Security hotspots to address:';
+      return 'Security hotspots to fix:';
     case 'issues':
     default:
-      return 'Selected issues:';
+      return 'Issues to fix:';
   }
 }
 
@@ -141,6 +143,10 @@ export function getSourceDeliverables(input: CanonicalPromptInput): string[] {
 
 function formatPercent(value?: number): string {
   return value === undefined ? 'n/a' : `${value}%`;
+}
+
+function getRepositoryContext(input: CanonicalPromptInput): string {
+  return input.repositoryName ? ` for workspace "${input.repositoryName}"` : '';
 }
 
 function formatNumber(value?: number): string {
@@ -253,7 +259,7 @@ function renderSingleSourceSelectionList(input: CanonicalPromptInput, source: st
   }
 }
 
-function hasMixedSelections(input: CanonicalPromptInput): boolean {
+export function hasMixedSelections(input: CanonicalPromptInput): boolean {
   return getActiveSources(input).length > 1;
 }
 
@@ -269,14 +275,14 @@ function getActiveSources(input: CanonicalPromptInput): string[] {
 function getHeadingForSource(source: string): string {
   switch (source) {
     case 'coverage':
-      return 'Coverage targets:';
+      return 'Coverage to fix:';
     case 'duplication':
-      return 'Duplication targets:';
+      return 'Duplication to fix:';
     case 'hotspots':
-      return 'Security hotspots to address:';
+      return 'Security hotspots to fix:';
     case 'issues':
     default:
-      return 'Selected issues:';
+      return 'Issues to fix:';
   }
 }
 

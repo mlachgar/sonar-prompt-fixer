@@ -4,17 +4,20 @@ import {
   getSourceExecutionRules,
   getSourceGoal,
   getSourceHeading,
+  hasMixedSelections,
   renderSelectionList,
   renderSharedConstraints
 } from './renderShared';
 
 export function renderCodexPrompt(input: CanonicalPromptInput): string {
+  const heading = getSourceHeading(input);
+
   return [
     getCodexIntro(input),
     '',
     getSourceGoal(input),
     '',
-    getSourceHeading(input),
+    ...(heading ? [heading] : []),
     renderSelectionList(input),
     '',
     renderSharedConstraints(input.style),
@@ -29,7 +32,7 @@ export function renderCodexPrompt(input: CanonicalPromptInput): string {
 
 function getCodexIntro(input: CanonicalPromptInput): string {
   if (hasMixedSelections(input)) {
-    return 'You are addressing selected Sonar items across multiple workspace modes in this repository.';
+    return 'You are improving this repository by fixing the selected Sonar findings.';
   }
 
   switch (input.source) {
@@ -41,16 +44,6 @@ function getCodexIntro(input: CanonicalPromptInput): string {
       return 'You are remediating security hotspots in this repository.';
     case 'issues':
     default:
-      return 'You are fixing Sonar issues in this repository.';
+      return 'You are fixing Sonar findings in this repository.';
   }
-}
-
-function hasMixedSelections(input: CanonicalPromptInput): boolean {
-  return (input.issues?.length ?? 0) > 0 &&
-    ((input.coverageTargets?.length ?? 0) > 0 ||
-      (input.duplicationTargets?.length ?? 0) > 0 ||
-      (input.hotspots?.length ?? 0) > 0) ||
-    ((input.coverageTargets?.length ?? 0) > 0 &&
-      ((input.duplicationTargets?.length ?? 0) > 0 || (input.hotspots?.length ?? 0) > 0)) ||
-    ((input.duplicationTargets?.length ?? 0) > 0 && (input.hotspots?.length ?? 0) > 0);
 }

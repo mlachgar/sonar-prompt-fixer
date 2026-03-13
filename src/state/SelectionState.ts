@@ -9,7 +9,7 @@ export class SelectionState {
 
   public setKnownIssues(issues: SonarIssue[]): void {
     this.issueByKey = new Map(issues.map((issue) => [issue.key, issue]));
-    for (const key of [...this.selectedKeys]) {
+    for (const key of this.selectedKeys) {
       if (!this.issueByKey.has(key)) {
         this.selectedKeys.delete(key);
       }
@@ -44,9 +44,16 @@ export class SelectionState {
   }
 
   public getSelectedIssues(): SonarIssue[] {
-    return [...this.selectedKeys]
-      .map((key) => this.issueByKey.get(key))
-      .filter((issue): issue is SonarIssue => Boolean(issue));
+    const selectedIssues: SonarIssue[] = [];
+
+    for (const key of this.selectedKeys) {
+      const issue = this.issueByKey.get(key);
+      if (issue) {
+        selectedIssues.push(issue);
+      }
+    }
+
+    return selectedIssues;
   }
 
   public getSelectedCount(): number {

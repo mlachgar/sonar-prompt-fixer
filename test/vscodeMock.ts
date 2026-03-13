@@ -62,6 +62,13 @@ export const TreeItemCollapsibleState = {
 } as const;
 
 export const workspace = {
+  get name() {
+    const firstFolder = workspaceFolders?.[0]?.uri.fsPath;
+    return firstFolder ? firstFolder.split('/').filter(Boolean).pop() : undefined;
+  },
+  get workspaceFile() {
+    return undefined;
+  },
   get workspaceFolders() {
     return workspaceFolders;
   },

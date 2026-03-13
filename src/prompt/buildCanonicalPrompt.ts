@@ -5,12 +5,14 @@ export function buildCanonicalPromptInput(
   selection: PromptSelection,
   target: PromptTarget,
   style: PromptStyle,
-  connection: SonarConnection
+  connection: SonarConnection,
+  repositoryName?: string
 ): CanonicalPromptInput {
   return {
     target,
     style,
     connection,
+    repositoryName,
     source: selection.source,
     issues: selection.issues ?? [],
     coverageTargets: selection.coverageTargets ?? [],

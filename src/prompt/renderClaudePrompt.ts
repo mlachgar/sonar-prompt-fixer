@@ -3,17 +3,20 @@ import {
   getSourceDeliverables,
   getSourceExecutionRules,
   getSourceHeading,
+  hasMixedSelections,
   renderSelectionList,
   renderSharedConstraints
 } from './renderShared';
 
 export function renderClaudePrompt(input: CanonicalPromptInput): string {
+  const heading = getSourceHeading(input);
+
   return [
     getClaudeIntro(input),
     '',
     getClaudeObjective(input),
     '',
-    getSourceHeading(input),
+    ...(heading ? [heading] : []),
     renderSelectionList(input),
     '',
     renderSharedConstraints(input.style),
@@ -26,48 +29,44 @@ export function renderClaudePrompt(input: CanonicalPromptInput): string {
   ].join('\n');
 }
 
+function getRepositoryContext(input: CanonicalPromptInput): string {
+  return input.repositoryName ? ` for workspace "${input.repositoryName}"` : '';
+}
+
 function getClaudeIntro(input: CanonicalPromptInput): string {
   if (hasMixedSelections(input)) {
-    return 'Please address the selected Sonar items across the active workspace modes in this codebase.';
+    return 'Please improve this repository by fixing the selected Sonar findings.';
   }
 
   switch (input.source) {
     case 'coverage':
-      return 'Please improve test coverage for the selected code paths in this codebase.';
+      return 'Please improve test coverage for the selected code paths in this repository.';
     case 'duplication':
-      return 'Please reduce the selected code duplication in this codebase.';
+      return 'Please reduce the selected code duplication in this repository.';
     case 'hotspots':
-      return 'Please remediate the selected security hotspots in this codebase.';
+      return 'Please remediate the selected security hotspots in this repository.';
     case 'issues':
     default:
-      return 'Please remediate the selected Sonar findings in this codebase.';
+      return 'Please remediate the selected Sonar findings in this repository.';
   }
 }
 
 function getClaudeObjective(input: CanonicalPromptInput): string {
+  const repositoryContext = getRepositoryContext(input);
+
   if (hasMixedSelections(input)) {
-    return `Objective: address the selected Sonar issues, coverage gaps, duplication targets, and security hotspots for project "${input.connection.projectKey}" with precise, low-risk changes.`;
+    return `Objective: address the selected Sonar issues, coverage gaps, duplication targets, and security hotspots${repositoryContext} with precise, low-risk changes.`;
   }
 
   switch (input.source) {
     case 'coverage':
-      return `Objective: produce focused tests for project "${input.connection.projectKey}" that cover the selected gaps while keeping production changes minimal.`;
+      return `Objective: produce focused tests${repositoryContext} that cover the selected gaps while keeping production changes minimal.`;
     case 'duplication':
-      return `Objective: produce precise refactors for project "${input.connection.projectKey}" that reduce duplication while preserving behavior and avoiding broad rewrites.`;
+      return `Objective: produce precise refactors${repositoryContext} that reduce duplication while preserving behavior and avoiding broad rewrites.`;
     case 'hotspots':
-      return `Objective: produce precise security remediations for project "${input.connection.projectKey}" while preserving current behavior and avoiding opportunistic refactors.`;
+      return `Objective: produce precise security remediations${repositoryContext} while preserving current behavior and avoiding opportunistic refactors.`;
     case 'issues':
     default:
-      return `Objective: produce precise fixes for project "${input.connection.projectKey}" while preserving current behavior and avoiding opportunistic refactors.`;
+      return `Objective: produce precise fixes${repositoryContext} while preserving current behavior and avoiding opportunistic refactors.`;
   }
-}
-
-function hasMixedSelections(input: CanonicalPromptInput): boolean {
-  return (input.issues?.length ?? 0) > 0 &&
-    ((input.coverageTargets?.length ?? 0) > 0 ||
-      (input.duplicationTargets?.length ?? 0) > 0 ||
-      (input.hotspots?.length ?? 0) > 0) ||
-    ((input.coverageTargets?.length ?? 0) > 0 &&
-      ((input.duplicationTargets?.length ?? 0) > 0 || (input.hotspots?.length ?? 0) > 0)) ||
-    ((input.duplicationTargets?.length ?? 0) > 0 && (input.hotspots?.length ?? 0) > 0);
 }

@@ -20,6 +20,7 @@ const connection: SonarConnection = {
   projectKey: 'acme_app',
   organization: 'acme'
 };
+const repositoryName = 'sonar-prompt-fixer';
 
 const issues: SonarIssue[] = [
   {
@@ -57,6 +58,7 @@ describe('prompt helpers', () => {
       target: 'codex',
       style: 'balanced',
       connection,
+      repositoryName: undefined,
       source: 'issues',
       issues,
       coverageTargets: [],
@@ -74,6 +76,7 @@ describe('prompt helpers', () => {
       target: 'codex',
       style: 'balanced',
       connection,
+      repositoryName: undefined,
       source: 'coverage',
       issues: [],
       coverageTargets: [],
@@ -241,10 +244,10 @@ describe('prompt helpers', () => {
       generatedAt: '2026-03-12T10:00:00.000Z'
     });
 
-    expect(output).toContain('Selected issues:');
-    expect(output).toContain('Coverage targets:');
-    expect(output).toContain('Duplication targets:');
-    expect(output).toContain('Security hotspots to address:');
+    expect(output).toContain('Issues to fix:');
+    expect(output).toContain('Coverage to fix:');
+    expect(output).toContain('Duplication to fix:');
+    expect(output).toContain('Security hotspots to fix:');
     expect(output).toContain('typescript:S1111');
     expect(output).toContain('src/main.ts');
     expect(output).toContain('src/shared.ts');
@@ -256,6 +259,7 @@ describe('prompt helpers', () => {
       target: 'codex',
       style: 'balanced',
       connection,
+      repositoryName,
       source: 'coverage',
       coverageTargets: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
@@ -264,6 +268,7 @@ describe('prompt helpers', () => {
       target: 'codex',
       style: 'balanced',
       connection,
+      repositoryName,
       source: 'duplication',
       duplicationTargets: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
@@ -272,6 +277,7 @@ describe('prompt helpers', () => {
       target: 'codex',
       style: 'balanced',
       connection,
+      repositoryName,
       source: 'hotspots',
       hotspots: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
@@ -280,6 +286,7 @@ describe('prompt helpers', () => {
       target: 'codex',
       style: 'balanced',
       connection,
+      repositoryName,
       source: 'issues',
       issues,
       coverageTargets: [{
@@ -299,7 +306,7 @@ describe('prompt helpers', () => {
       source: 'coverage',
       coverageTargets: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
-    })).toBe('Coverage targets:');
+    })).toBe('Coverage to fix:');
     expect(getSourceHeading({
       target: 'codex',
       style: 'balanced',
@@ -307,7 +314,7 @@ describe('prompt helpers', () => {
       source: 'duplication',
       duplicationTargets: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
-    })).toBe('Duplication targets:');
+    })).toBe('Duplication to fix:');
     expect(getSourceHeading({
       target: 'codex',
       style: 'balanced',
@@ -315,7 +322,7 @@ describe('prompt helpers', () => {
       source: 'hotspots',
       hotspots: [],
       generatedAt: '2026-03-12T10:00:00.000Z'
-    })).toBe('Security hotspots to address:');
+    })).toBe('Security hotspots to fix:');
     expect(getSourceExecutionRules({
       target: 'codex',
       style: 'balanced',
@@ -360,7 +367,7 @@ describe('prompt helpers', () => {
         message: 'Review risky auth flow.'
       }],
       generatedAt: '2026-03-12T10:00:00.000Z'
-    })).toBe('Selected items across modes:');
+    })).toBe('');
     expect(getSourceExecutionRules({
       target: 'codex',
       style: 'balanced',
@@ -385,6 +392,7 @@ describe('target-specific prompt renderers', () => {
     target: 'codex' as const,
     style: 'guided' as const,
     connection,
+    repositoryName,
     source: 'issues' as const,
     issues,
     generatedAt: '2026-03-12T10:00:00.000Z'
@@ -392,27 +400,27 @@ describe('target-specific prompt renderers', () => {
 
   it('renders the codex prompt', () => {
     const output = renderCodexPrompt(input);
-    expect(output).toContain('You are fixing Sonar issues in this repository.');
-    expect(output).toContain('Goal: Resolve the selected Sonar findings for project "acme_app"');
+    expect(output).toContain('You are fixing Sonar findings in this repository.');
+    expect(output).toContain('Goal: Resolve the folowing Sonar findings for workspace "sonar-prompt-fixer"');
     expect(output).toContain('Deliverables:');
   });
 
   it('renders the claude prompt', () => {
     const output = renderClaudePrompt(input);
-    expect(output).toContain('Please remediate the selected Sonar findings in this codebase.');
+    expect(output).toContain('Please remediate the selected Sonar findings in this repository.');
     expect(output).toContain('Expected response:');
   });
 
   it('renders the qwen prompt', () => {
     const output = renderQwenPrompt(input);
-    expect(output).toContain('Task: fix the selected Sonar issues in the current repository.');
+    expect(output).toContain('Task: fix the selected Sonar findings in this repository.');
     expect(output).toContain('Output contract:');
   });
 
   it('dispatches by target and defaults codex', () => {
     expect(renderPrompt({ ...input, target: 'claude' })).toContain('Please remediate');
-    expect(renderPrompt({ ...input, target: 'qwen' })).toContain('Task: fix the selected Sonar issues');
-    expect(renderPrompt({ ...input, target: 'codex' })).toContain('You are fixing Sonar issues');
+    expect(renderPrompt({ ...input, target: 'qwen' })).toContain('Task: fix the selected Sonar findings');
+    expect(renderPrompt({ ...input, target: 'codex' })).toContain('You are fixing Sonar findings');
   });
 
   it('renders source-specific prompts for coverage and hotspots', () => {
@@ -420,6 +428,7 @@ describe('target-specific prompt renderers', () => {
       target: 'codex' as const,
       style: 'guided' as const,
       connection,
+      repositoryName,
       source: 'coverage' as const,
       coverageTargets: [{
         key: 'cov-1',
@@ -437,6 +446,7 @@ describe('target-specific prompt renderers', () => {
       target: 'claude' as const,
       style: 'guided' as const,
       connection,
+      repositoryName,
       source: 'hotspots' as const,
       hotspots: [{
         key: 'hs-1',
@@ -452,6 +462,7 @@ describe('target-specific prompt renderers', () => {
       target: 'qwen' as const,
       style: 'guided' as const,
       connection,
+      repositoryName,
       source: 'duplication' as const,
       duplicationTargets: [{
         key: 'dup-1',
@@ -484,6 +495,7 @@ describe('target-specific prompt renderers', () => {
       target: 'codex' as const,
       style: 'guided' as const,
       connection,
+      repositoryName,
       source: 'issues' as const,
       issues: [issues[0]],
       coverageTargets: [{
@@ -495,10 +507,12 @@ describe('target-specific prompt renderers', () => {
       generatedAt: '2026-03-12T10:00:00.000Z'
     };
 
-    expect(renderCodexPrompt(mixedInput)).toContain('across multiple workspace modes');
-    expect(renderCodexPrompt(mixedInput)).toContain('Selected items across modes:');
-    expect(renderClaudePrompt({ ...mixedInput, target: 'claude' })).toContain('across the active workspace modes');
-    expect(renderQwenPrompt({ ...mixedInput, target: 'qwen' })).toContain('across all active workspace modes');
+    expect(renderCodexPrompt(mixedInput)).toContain('improving this repository by fixing the selected Sonar findings');
+    expect(renderCodexPrompt(mixedInput)).not.toContain('Items list across modes:');
+    expect(renderCodexPrompt(mixedInput)).toContain('Issues to fix:');
+    expect(renderCodexPrompt(mixedInput)).toContain('Coverage to fix:');
+    expect(renderClaudePrompt({ ...mixedInput, target: 'claude' })).toContain('improve this repository by fixing the selected Sonar findings');
+    expect(renderQwenPrompt({ ...mixedInput, target: 'qwen' })).toContain('improve this repository by fixing the selected Sonar findings');
   });
 
   it('treats non-issue multi-mode selections as mixed prompts too', () => {
@@ -506,6 +520,7 @@ describe('target-specific prompt renderers', () => {
       target: 'codex' as const,
       style: 'guided' as const,
       connection,
+      repositoryName,
       source: 'coverage' as const,
       coverageTargets: [{
         key: 'cov-1',
@@ -524,6 +539,7 @@ describe('target-specific prompt renderers', () => {
       target: 'codex' as const,
       style: 'guided' as const,
       connection,
+      repositoryName,
       source: 'duplication' as const,
       duplicationTargets: [{
         key: 'dup-1',
@@ -539,12 +555,23 @@ describe('target-specific prompt renderers', () => {
       generatedAt: '2026-03-12T10:00:00.000Z'
     };
 
-    expect(renderCodexPrompt(coverageAndHotspots)).toContain('across multiple workspace modes');
-    expect(renderClaudePrompt({ ...coverageAndHotspots, target: 'claude' })).toContain('across the active workspace modes');
-    expect(renderQwenPrompt({ ...coverageAndHotspots, target: 'qwen' })).toContain('across all active workspace modes');
+    expect(renderCodexPrompt(coverageAndHotspots)).toContain('improving this repository by fixing the selected Sonar findings');
+    expect(renderClaudePrompt({ ...coverageAndHotspots, target: 'claude' })).toContain('improve this repository by fixing the selected Sonar findings');
+    expect(renderQwenPrompt({ ...coverageAndHotspots, target: 'qwen' })).toContain('improve this repository by fixing the selected Sonar findings');
 
-    expect(renderCodexPrompt({ ...duplicationAndHotspots, target: 'codex' })).toContain('across multiple workspace modes');
-    expect(renderClaudePrompt({ ...duplicationAndHotspots, target: 'claude' })).toContain('across the active workspace modes');
-    expect(renderQwenPrompt({ ...duplicationAndHotspots, target: 'qwen' })).toContain('across all active workspace modes');
+    expect(renderCodexPrompt({ ...duplicationAndHotspots, target: 'codex' })).toContain('improving this repository by fixing the selected Sonar findings');
+    expect(renderClaudePrompt({ ...duplicationAndHotspots, target: 'claude' })).toContain('improve this repository by fixing the selected Sonar findings');
+    expect(renderQwenPrompt({ ...duplicationAndHotspots, target: 'qwen' })).toContain('improve this repository by fixing the selected Sonar findings');
+  });
+
+  it('falls back to the Sonar project key when no repository name is provided', () => {
+    expect(renderCodexPrompt({
+      target: 'codex',
+      style: 'guided',
+      connection,
+      source: 'issues',
+      issues,
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    })).toContain('Goal: Resolve the folowing Sonar findings with minimal, safe code changes.');
   });
 });
