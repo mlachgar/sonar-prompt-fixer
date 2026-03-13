@@ -13,7 +13,10 @@ export type SonarWorkspaceProject = {
 
 export function discoverSonarWorkspaceProjects(extensionPath?: string): SonarWorkspaceProject[] {
   const workspaceRoots = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [];
-  const searchRoots = workspaceRoots.length > 0 ? workspaceRoots : extensionPath ? [extensionPath] : [];
+  let searchRoots = workspaceRoots;
+  if (searchRoots.length === 0) {
+    searchRoots = extensionPath ? [extensionPath] : [];
+  }
   const projects: SonarWorkspaceProject[] = [];
   const seenPropertiesPaths = new Set<string>();
 
