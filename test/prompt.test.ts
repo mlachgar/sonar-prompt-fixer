@@ -66,6 +66,23 @@ describe('prompt helpers', () => {
     });
   });
 
+  it('defaults missing selections to empty arrays', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-12T10:00:00.000Z'));
+
+    expect(buildCanonicalPromptInput({ source: 'coverage' }, 'codex', 'balanced', connection)).toEqual({
+      target: 'codex',
+      style: 'balanced',
+      connection,
+      source: 'coverage',
+      issues: [],
+      coverageTargets: [],
+      duplicationTargets: [],
+      hotspots: [],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    });
+  });
+
   it('renders the issue list with optional metadata only when present', () => {
     const output = renderSelectionList({
       target: 'codex',
@@ -482,5 +499,52 @@ describe('target-specific prompt renderers', () => {
     expect(renderCodexPrompt(mixedInput)).toContain('Selected items across modes:');
     expect(renderClaudePrompt({ ...mixedInput, target: 'claude' })).toContain('across the active workspace modes');
     expect(renderQwenPrompt({ ...mixedInput, target: 'qwen' })).toContain('across all active workspace modes');
+  });
+
+  it('treats non-issue multi-mode selections as mixed prompts too', () => {
+    const coverageAndHotspots = {
+      target: 'codex' as const,
+      style: 'guided' as const,
+      connection,
+      source: 'coverage' as const,
+      coverageTargets: [{
+        key: 'cov-1',
+        component: 'acme_app:src/main.ts',
+        path: 'src/main.ts',
+        uncoveredLines: 4
+      }],
+      hotspots: [{
+        key: 'hs-1',
+        component: 'acme_app:src/auth.ts',
+        message: 'Review risky auth flow.'
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    };
+    const duplicationAndHotspots = {
+      target: 'codex' as const,
+      style: 'guided' as const,
+      connection,
+      source: 'duplication' as const,
+      duplicationTargets: [{
+        key: 'dup-1',
+        component: 'acme_app:src/shared.ts',
+        path: 'src/shared.ts',
+        duplicatedLines: 18
+      }],
+      hotspots: [{
+        key: 'hs-2',
+        component: 'acme_app:src/crypto.ts',
+        message: 'Review crypto usage.'
+      }],
+      generatedAt: '2026-03-12T10:00:00.000Z'
+    };
+
+    expect(renderCodexPrompt(coverageAndHotspots)).toContain('across multiple workspace modes');
+    expect(renderClaudePrompt({ ...coverageAndHotspots, target: 'claude' })).toContain('across the active workspace modes');
+    expect(renderQwenPrompt({ ...coverageAndHotspots, target: 'qwen' })).toContain('across all active workspace modes');
+
+    expect(renderCodexPrompt({ ...duplicationAndHotspots, target: 'codex' })).toContain('across multiple workspace modes');
+    expect(renderClaudePrompt({ ...duplicationAndHotspots, target: 'claude' })).toContain('across the active workspace modes');
+    expect(renderQwenPrompt({ ...duplicationAndHotspots, target: 'qwen' })).toContain('across all active workspace modes');
   });
 });

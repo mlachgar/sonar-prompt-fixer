@@ -10,6 +10,8 @@ export default defineConfig({
       reportsDirectory: './coverage',
       include: [
         'src/prompt/**/*.ts',
+        'src/sonar/measureHelpers.ts',
+        'src/sonar/SonarBackendBase.ts',
         'src/sonar/SonarBackendFactory.ts',
         'src/sonar/SonarCloudBackend.ts',
         'src/sonar/SonarQubeServerBackend.ts',

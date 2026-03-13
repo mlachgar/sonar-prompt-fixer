@@ -58,6 +58,12 @@ describe('diagnostics and error helpers', () => {
       details: 'alt name invalid'
     });
 
+    expect(mapConnectionError({ code: 'SOMETHING_ELSE', message: 'unexpected' })).toEqual({
+      ok: false,
+      kind: 'unknown',
+      message: 'Unknown error while testing the Sonar connection.'
+    });
+
     expect(mapConnectionError(new Error('mystery'))).toEqual({
       ok: false,
       kind: 'unknown',
@@ -127,5 +133,11 @@ describe('sonar-project.properties helpers', () => {
 
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
     fs.rmSync(extensionRoot, { recursive: true, force: true });
+  });
+
+  it('returns empty properties when no workspace or extension path is available', () => {
+    setWorkspaceFolders(undefined);
+
+    expect(loadSonarProjectProperties()).toEqual({});
   });
 });

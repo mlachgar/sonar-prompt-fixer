@@ -379,6 +379,42 @@ describe('ConnectionState', () => {
     expect(state.getActiveProfile().id).toBe('valid');
   });
 
+  it('sanitizes non-string stored fields and falls back to the default inferred profile name', () => {
+    setConfiguration({
+      'connections.activeProfileId': 'fallback-name',
+      'connections.profiles': [
+        {
+          id: 'fallback-name',
+          name: 42,
+          connection: {
+            type: 'cloud',
+            baseUrl: 123,
+            projectKey: null
+          }
+        }
+      ]
+    });
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
+
+    expect(state.getProfiles()).toEqual([
+      {
+        id: 'fallback-name',
+        name: 'Sonar Connection (Cloud)',
+        connection: {
+          type: 'cloud',
+          baseUrl: '',
+          projectKey: '',
+          organization: undefined,
+          branch: undefined,
+          pullRequest: undefined,
+          verifyTls: true,
+          authMode: 'bearer'
+        }
+      }
+    ]);
+  });
+
   it('prefills the default profile from sonar-project.properties when no profile is saved', () => {
     const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-fallback-'));
     setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
