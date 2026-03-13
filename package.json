@@ -1,7 +1,7 @@
 {
   "name": "sonar-prompt-fixer",
   "displayName": "Sonar Prompt Fixer",
-  "description": "Turn SonarQube findings into remediation prompts for Codex, Claude Code, and Qwen directly from VS Code.",
+  "description": "Connect reusable SonarQube profiles, switch workspace projects, and turn Sonar findings into remediation prompts in VS Code.",
   "version": "0.0.1",
   "publisher": "mohamedlachgar",
   "license": "MIT",
@@ -25,6 +25,9 @@
     "sonarqube",
     "sonarcloud",
     "sonar",
+    "monorepo",
+    "project-selector",
+    "developer-tools",
     "prompt",
     "codex",
     "claude",
