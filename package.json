@@ -1,16 +1,36 @@
 {
   "name": "sonar-prompt-fixer",
   "displayName": "Sonar Prompt Fixer",
-  "description": "Fetch Sonar issues, filter and select them in VS Code, and generate remediation prompts for coding agents.",
+  "description": "Turn SonarQube findings into remediation prompts for Codex, Claude Code, and Qwen directly from VS Code.",
   "version": "0.0.1",
   "publisher": "mohamedlachgar",
   "license": "MIT",
+  "icon": "media/icons/marketplace-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mlachgar/sonar-prompt-fixer.git"
+  },
+  "homepage": "https://github.com/mlachgar/sonar-prompt-fixer#readme",
+  "bugs": {
+    "url": "https://github.com/mlachgar/sonar-prompt-fixer/issues"
+  },
   "engines": {
     "vscode": "^1.96.0"
   },
   "categories": [
     "Other",
     "Programming Languages"
+  ],
+  "keywords": [
+    "sonarqube",
+    "sonarcloud",
+    "sonar",
+    "prompt",
+    "codex",
+    "claude",
+    "qwen",
+    "static-analysis",
+    "code-quality"
   ],
   "activationEvents": [
     "onStartupFinished"

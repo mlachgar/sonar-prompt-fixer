@@ -2,6 +2,13 @@
 
 Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a self-hosted SonarQube Server, fetches project findings, and generates remediation prompts for coding agents such as Codex, Claude Code, and Qwen Code. The main workflow lives in a dedicated Sonar Workspace, while the sidebar provides a lightweight Findings summary.
 
+## What You Get
+
+- Connect to SonarQube Cloud or SonarQube Server from inside VS Code
+- Review findings in a dedicated Sonar Workspace with focused modes
+- Generate prompts for Codex, Claude Code, and Qwen Code from selected findings
+- Keep tokens out of plain settings by storing them in VS Code `SecretStorage`
+
 ## Features
 
 - Unified connection model for SonarQube Cloud and SonarQube Server
@@ -23,6 +30,38 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
   - Claude Code
   - Qwen Code
 - Real connection diagnostics for network, TLS, auth, and project validation failures
+
+## Getting Started
+
+1. Install the extension from the VS Code Marketplace.
+2. Open the `Sonar Prompt Fixer` view from the Activity Bar.
+3. Open the configuration editor from the `Findings` view title.
+4. Add a SonarQube Cloud or SonarQube Server connection profile.
+5. Save your token securely in the editor and test the connection.
+6. Refresh the Findings view and open the Sonar Workspace.
+7. Select findings in a workspace mode and generate a prompt for your coding agent.
+
+When available, the extension prefills configuration from:
+
+- `sonar-project.properties`
+- local `.env` via `SONAR_TOKEN`
+
+## How To Use
+
+The extension is organized around two surfaces:
+
+- `Findings` sidebar for profile switching, refresh, and summary counts
+- `Sonar Workspace` editor for filtering, selection, and prompt generation
+
+Typical flow:
+
+1. Open the `Findings` sidebar.
+2. Choose or create a connection profile.
+3. Validate the connection and load findings.
+4. Open the matching workspace mode from a summary card or command.
+5. Filter and select the issues, coverage gaps, duplications, or hotspots you want to address.
+6. Generate a prompt for `Codex`, `Claude Code`, or `Qwen Code`.
+7. Copy the generated prompt into your coding agent workflow.
 
 ## Configuration
 
@@ -110,7 +149,19 @@ Supported styles:
 - `balanced`
 - `guided`
 
-## How To Run
+## Extension Settings
+
+The main user-facing settings are:
+
+- `sonarPromptFixer.connections.profiles`
+- `sonarPromptFixer.connections.activeProfileId`
+- `sonarPromptFixer.groupBy`
+- `sonarPromptFixer.prompt.defaultTarget`
+- `sonarPromptFixer.prompt.defaultStyle`
+
+Most users can manage connection data from the built-in configuration editor instead of editing JSON manually.
+
+## Development
 
 1. Install dependencies:
 
@@ -220,6 +271,12 @@ Recommended coverage strategy for this codebase:
 - The Findings sidebar is intentionally summary-only; rich filtering, selection, and prompt actions live in the Sonar Workspace.
 - Some self-hosted SonarQube endpoints can fail independently because of permissions or edition capabilities; the sidebar degrades per section instead of failing entirely.
 - The webview is intentionally lightweight and does not use an external frontend framework.
+
+## Release Notes
+
+See the project history and tagged releases on GitHub:
+
+- [Releases](https://github.com/mlachgar/sonar-prompt-fixer/releases)
 
 ## Architecture Overview
 
