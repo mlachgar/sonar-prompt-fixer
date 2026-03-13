@@ -3,7 +3,7 @@
   "displayName": "Sonar Prompt Fixer",
   "description": "Fetch Sonar issues, filter and select them in VS Code, and generate remediation prompts for coding agents.",
   "version": "0.0.1",
-  "publisher": "local",
+  "publisher": "mohamedlachgar",
   "license": "MIT",
   "engines": {
     "vscode": "^1.96.0"
