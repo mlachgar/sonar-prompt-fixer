@@ -2,7 +2,7 @@
   "name": "sonar-prompt-fixer",
   "displayName": "Sonar Prompt Fixer",
   "description": "Connect reusable SonarQube profiles, switch workspace projects, and turn Sonar findings into remediation prompts in VS Code.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "mohamedlachgar",
   "license": "MIT",
   "icon": "media/icons/marketplace-icon.png",
