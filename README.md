@@ -13,8 +13,10 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
 
 - Unified connection model for SonarQube Cloud and SonarQube Server
 - Secure token storage with VS Code `SecretStorage`
-- Automatic configuration prefill from `sonar-project.properties` when project key or organization are not yet set
+- Project metadata resolved from `sonar-project.properties` so server profiles stay reusable across repositories
+- Workspace-level project selector for repositories with multiple Sonar projects
 - Automatic token fallback from `.env` when `SONAR_TOKEN` is present and no token is stored yet
+- Optional SonarCloud connection suggestion when a valid local token and project metadata are already available
 - One-time onboarding hint that points first-time users to the Activity Bar entry
 - Configuration editor opened from the Findings view
 - Findings summary view with click-through entry points into each workspace mode
@@ -41,7 +43,7 @@ Sonar Prompt Fixer is a VS Code extension that connects to SonarQube Cloud or a 
 6. Refresh the Findings view and open the Sonar Workspace.
 7. Select findings in a workspace mode and generate a prompt for your coding agent.
 
-When available, the extension prefills configuration from:
+When available, the extension resolves project and token information from:
 
 - `sonar-project.properties`
 - local `.env` via `SONAR_TOKEN`
@@ -57,11 +59,12 @@ Typical flow:
 
 1. Open the `Findings` sidebar.
 2. Choose or create a connection profile.
-3. Validate the connection and load findings.
-4. Open the matching workspace mode from a summary card or command.
-5. Filter and select the issues, coverage gaps, duplications, or hotspots you want to address.
-6. Generate a prompt for `Codex`, `Claude Code`, or `Qwen Code`.
-7. Copy the generated prompt into your coding agent workflow.
+3. Choose the active project from the Findings sidebar when the repository contains multiple `sonar-project.properties` files.
+4. Make sure the selected project defines `sonar.projectKey` and, for SonarCloud, `sonar.organization` when needed.
+5. Validate the connection and load findings.
+6. Filter and select the issues, coverage gaps, duplications, or hotspots you want to address.
+7. Generate a prompt for `Codex`, `Claude Code`, or `Qwen Code`.
+8. Copy the generated prompt into your coding agent workflow.
 
 ## Configuration
 
@@ -75,12 +78,29 @@ Key settings:
 - `sonarPromptFixer.prompt.defaultTarget`
 - `sonarPromptFixer.prompt.defaultStyle`
 
-You can manage profiles from the configuration editor opened from the `Findings` view. When no profile has been saved yet, the editor starts from these defaults:
+You can manage profiles from the configuration editor opened from the `Findings` view.
 
-- `projectKey` from `sonar.projectKey` in `sonar-project.properties`
-- `organization` from `sonar.organization` in `sonar-project.properties`
+Saved profiles store only server-level connection data such as:
 
-Saved profiles become the source of truth for Sonar connections.
+- target type
+- base URL
+- branch or pull request overrides
+- auth mode
+- TLS verification
+
+Project-level metadata is read from `sonar-project.properties` in the current workspace:
+
+- `sonar.projectKey`
+- `sonar.organization`
+
+The extension discovers projects from:
+
+- `/sonar-project.properties`
+- `/*/sonar-project.properties`
+
+When more than one project is available, the Findings sidebar lets you switch the active workspace project. The first discovered project is selected automatically.
+
+The discovered project list is not stored. The extension rescans the workspace on activation and after workspace-folder changes, and only persists the selected project directory path.
 
 When a saved active profile is valid and has a token, the extension preloads findings on startup.
 
@@ -92,12 +112,15 @@ Use the configuration editor to save or remove the token. The token is stored in
 
 If no token is stored yet, the extension also tries to read `SONAR_TOKEN` from a local `.env` file in the workspace or extension root.
 
+If no saved profile exists yet and the detected workspace project plus available token can authenticate against SonarCloud successfully, the extension offers to save a reusable `SonarCloud` profile.
+
 ## Commands
 
 - `Sonar Prompt Fixer: Open Configuration Editor`
 - `Sonar Prompt Fixer: Open Sonar Workspace`
+- `Sonar Prompt Fixer: Reset Connections And Projects`
 
-These are the only public commands. Day-to-day work such as filtering, selection, prompt generation, and prompt copying happens inside the workspace UI.
+These are the public commands. Day-to-day work such as filtering, selection, prompt generation, and prompt copying happens inside the workspace UI.
 
 ## Workspace Modes
 
@@ -186,9 +209,9 @@ npm run test:coverage
 5. On first activation, the extension shows a one-time onboarding hint with shortcuts to configuration and the Sonar Workspace.
 6. In the new window, open the `Sonar Prompt Fixer` sidebar.
 7. Use the profile selector in the `Findings` view or open the configuration editor from the view title.
-8. Review the prefilled values from `sonar-project.properties` and `.env` if those files exist.
-9. Save your profile and token, then test the connection from the configuration editor.
-10. Refresh the Findings sidebar if needed and confirm the summary counts load.
+8. Confirm the selected project in the Findings sidebar points at the right directory, and review any token fallback from `.env` if present.
+9. Save your server profile and token, then test the connection from the configuration editor.
+10. Refresh the Findings sidebar if needed and confirm the summary cards appear after findings load.
 11. Click a summary card or use the workspace button to open the editor-based Sonar Workspace.
 12. Choose a mode: `Issues`, `Coverage`, `Duplication`, or `Security Hotspots`.
 13. Use step 1 to filter and select the relevant items.
@@ -202,9 +225,15 @@ npm run test:coverage
   - invalid token
   - wrong project key
   - self-signed certificate setup
-- Confirm empty configuration is prefilled from `sonar-project.properties` when available.
+- Confirm project metadata is detected from `sonar-project.properties` when available.
+- Confirm the workspace project selector lists the root project and one-level child projects when present.
+- Confirm switching the active project reloads findings for the selected `projectKey`.
+- Confirm only saved profiles appear in the profile selector.
+- Confirm a detected SonarCloud connection can be saved when no profile exists yet.
+- Confirm the connection test fails with a clear message when `sonar.projectKey` is missing.
 - Confirm a stored token still takes precedence over `.env`.
 - Confirm the onboarding hint appears once on first activation and does not block startup.
+- Confirm reopening or changing workspace folders rescans projects and refreshes the active project selection.
 - Confirm findings preload on startup when the active profile is already valid.
 - In `Issues` mode, fetch issues and test local filtering by:
   - type
@@ -232,7 +261,7 @@ npm run test:coverage
 - Confirm the tables show relative locations without unwanted horizontal scrolling.
 - Confirm the status combobox shows all status options cleanly.
 - Generate prompts in all four workspace modes for all three coding-agent targets and copy them from the prompt panel.
-- Confirm the Findings summary shows counts for each workspace mode and resets while refreshing.
+- Confirm the Findings summary hides cards until findings have loaded and hides them again while refreshing.
 - Confirm the Findings profile selector switches profiles and reloads summary counts.
 - Confirm each Findings summary card opens the matching workspace mode.
 

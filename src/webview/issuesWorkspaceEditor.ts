@@ -128,6 +128,11 @@ export class IssuesWorkspaceEditor {
   }
 
   private getRepositoryName(): string | undefined {
+    const activeProject = this.connectionState.getActiveProject();
+    if (activeProject) {
+      return activeProject.label;
+    }
+
     if (vscode.workspace.name) {
       return vscode.workspace.name;
     }

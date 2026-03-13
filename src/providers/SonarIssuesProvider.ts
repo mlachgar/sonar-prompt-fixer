@@ -75,6 +75,10 @@ export class SonarIssuesProvider implements vscode.TreeDataProvider<IssueTreeIte
     return this.loadingFindings !== undefined;
   }
 
+  public hasLoadedData(): boolean {
+    return this.hasLoadedFindings;
+  }
+
   public getLastLoadWarnings(): string[] {
     return [...this.lastLoadWarnings];
   }

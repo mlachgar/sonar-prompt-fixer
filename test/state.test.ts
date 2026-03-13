@@ -177,7 +177,7 @@ afterEach(() => {
 });
 
 describe('ConnectionState', () => {
-  it('falls back to the default profile when stored configuration is malformed', () => {
+  it('keeps the saved profiles list empty when stored configuration is malformed', () => {
     setWorkspaceFolders(undefined);
     setConfiguration({
       'connections.activeProfileId': 'missing',
@@ -208,21 +208,17 @@ describe('ConnectionState', () => {
     const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-empty-default-'));
     const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath } as never);
 
-    expect(state.getProfiles()).toEqual([{
-      id: '__default__',
-      name: 'New Connection',
-      connection: {
-        type: 'cloud',
-        baseUrl: 'https://sonarcloud.io',
-        projectKey: '',
-        organization: undefined,
-        branch: undefined,
-        pullRequest: undefined,
-        verifyTls: true,
-        authMode: 'bearer'
-      }
-    }]);
-    expect(state.getActiveProfileId()).toBe('__default__');
+    expect(state.getProfiles()).toEqual([]);
+    expect(state.getActiveProfileId()).toBe('');
+    expect(state.getActiveProfile()).toBeUndefined();
+    expect(state.getDefaultProfileConnection()).toEqual({
+      type: 'cloud',
+      baseUrl: 'https://sonarcloud.io',
+      branch: undefined,
+      pullRequest: undefined,
+      verifyTls: true,
+      authMode: 'bearer'
+    });
 
     fs.rmSync(extensionPath, { recursive: true, force: true });
   });
@@ -237,8 +233,8 @@ describe('ConnectionState', () => {
     const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-invalid-profiles-'));
     const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath } as never);
 
-    expect(state.getProfiles()).toHaveLength(1);
-    expect(state.getActiveProfileId()).toBe('__default__');
+    expect(state.getProfiles()).toHaveLength(0);
+    expect(state.getActiveProfileId()).toBe('');
 
     fs.rmSync(extensionPath, { recursive: true, force: true });
   });
@@ -271,7 +267,7 @@ describe('ConnectionState', () => {
     expect(state.getConnection()).toEqual({
       type: 'server',
       baseUrl: 'https://sonar.example.com',
-      projectKey: 'app_key',
+      projectKey: '',
       organization: undefined,
       branch: 'main',
       pullRequest: undefined,
@@ -321,12 +317,10 @@ describe('ConnectionState', () => {
     expect(state.getProfiles()).toEqual([
       {
         id: 'cloud-profile',
-        name: 'app-key (Cloud)',
+        name: 'https://sonarcloud.io (Cloud)',
         connection: {
           type: 'cloud',
           baseUrl: 'https://sonarcloud.io',
-          projectKey: 'app-key',
-          organization: undefined,
           branch: undefined,
           pullRequest: undefined,
           verifyTls: true,
@@ -339,8 +333,6 @@ describe('ConnectionState', () => {
         connection: {
           type: 'server',
           baseUrl: 'https://sonar.example.com',
-          projectKey: 'srv',
-          organization: 'team',
           branch: 'main',
           pullRequest: '42',
           verifyTls: false,
@@ -349,7 +341,7 @@ describe('ConnectionState', () => {
       }
     ]);
     expect(state.getActiveProfileId()).toBe('cloud-profile');
-    expect(state.getActiveProfile().id).toBe('cloud-profile');
+    expect(state.getActiveProfile()?.id).toBe('cloud-profile');
   });
 
   it('drops profiles whose connection value is not an object', () => {
@@ -366,8 +358,7 @@ describe('ConnectionState', () => {
           name: 'Valid',
           connection: {
             type: 'cloud',
-            baseUrl: 'https://sonarcloud.io',
-            projectKey: 'proj'
+            baseUrl: 'https://sonarcloud.io'
           }
         }
       ]
@@ -376,7 +367,7 @@ describe('ConnectionState', () => {
     const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
 
     expect(state.getProfiles()).toHaveLength(1);
-    expect(state.getActiveProfile().id).toBe('valid');
+    expect(state.getActiveProfile()?.id).toBe('valid');
   });
 
   it('sanitizes non-string stored fields and falls back to the default inferred profile name', () => {
@@ -404,8 +395,6 @@ describe('ConnectionState', () => {
         connection: {
           type: 'cloud',
           baseUrl: '',
-          projectKey: '',
-          organization: undefined,
           branch: undefined,
           pullRequest: undefined,
           verifyTls: true,
@@ -415,7 +404,7 @@ describe('ConnectionState', () => {
     ]);
   });
 
-  it('prefills the default profile from sonar-project.properties when no profile is saved', () => {
+  it('uses the default connection with sonar-project.properties when no profile is saved', () => {
     const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-fallback-'));
     setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
     fs.writeFileSync(
@@ -433,7 +422,7 @@ describe('ConnectionState', () => {
     fs.rmSync(workspacePath, { recursive: true, force: true });
   });
 
-  it('prefills the default profile from the extension path when no workspace folder is open', () => {
+  it('uses the default connection with extension-path sonar-project.properties when no workspace folder is open', () => {
     const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-extension-'));
     setWorkspaceFolders(undefined);
     fs.writeFileSync(
@@ -451,7 +440,32 @@ describe('ConnectionState', () => {
     fs.rmSync(extensionPath, { recursive: true, force: true });
   });
 
-  it('uses saved profiles instead of sonar-project.properties defaults', () => {
+  it('auto-selects the first discovered project and supports switching projects', async () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-project-select-'));
+    const childProjectPath = path.join(workspacePath, 'app');
+    fs.mkdirSync(childProjectPath);
+    fs.writeFileSync(path.join(workspacePath, 'sonar-project.properties'), 'sonar.projectKey=root-key\n');
+    fs.writeFileSync(path.join(childProjectPath, 'sonar-project.properties'), 'sonar.projectKey=child-key\n');
+    setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
+
+    const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
+
+    expect(state.getActiveProject()?.projectKey).toBe('root-key');
+    await state.ensureActiveProjectSelection();
+    expect(getUpdateCalls()).toContainEqual({
+      key: 'projects.activeProjectPath',
+      value: workspacePath,
+      target: ConfigurationTarget.Workspace
+    });
+
+    await state.selectProject(childProjectPath);
+    expect(state.getActiveProject()?.projectKey).toBe('child-key');
+    expect(state.getConnection().projectKey).toBe('child-key');
+
+    fs.rmSync(workspacePath, { recursive: true, force: true });
+  });
+
+  it('uses sonar-project.properties even when a saved profile is active', () => {
     const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-explicit-'));
     setConfiguration({
       'connections.activeProfileId': 'cloud-profile',
@@ -461,9 +475,7 @@ describe('ConnectionState', () => {
           name: 'Cloud',
           connection: {
             type: 'cloud',
-            baseUrl: 'https://sonarcloud.io',
-            projectKey: 'configured-key',
-            organization: 'configured-org'
+            baseUrl: 'https://sonarcloud.io'
           }
         }
       ]
@@ -477,8 +489,8 @@ describe('ConnectionState', () => {
     const state = new ConnectionState({ secrets: createSecretStorage(), extensionPath: '/extension' } as never);
 
     expect(state.getConnection()).toMatchObject({
-      projectKey: 'configured-key',
-      organization: 'configured-org'
+      projectKey: 'from-file',
+      organization: 'from-org'
     });
 
     fs.rmSync(workspacePath, { recursive: true, force: true });
@@ -496,8 +508,6 @@ describe('ConnectionState', () => {
       connection: {
         type: 'cloud',
         baseUrl: 'https://sonarcloud.io',
-        projectKey: 'proj',
-        organization: 'org',
         branch: 'feature',
         pullRequest: '123',
         verifyTls: true,
@@ -517,7 +527,7 @@ describe('ConnectionState', () => {
       'connections.activeProfileId'
     ]);
     expect(state.getProfiles()).toHaveLength(1);
-    expect(state.getActiveProfile().name).toBe('Cloud profile');
+    expect(state.getActiveProfile()?.name).toBe('Cloud profile');
     await expect(state.getToken()).resolves.toBe('profile-token');
     expect(onDidChange).toHaveBeenCalledTimes(3);
   });
@@ -531,8 +541,7 @@ describe('ConnectionState', () => {
           name: 'Existing',
           connection: {
             type: 'server',
-            baseUrl: 'https://old.example.com',
-            projectKey: 'old-key'
+            baseUrl: 'https://old.example.com'
           }
         }
       ]
@@ -548,8 +557,6 @@ describe('ConnectionState', () => {
       connection: {
         type: 'server',
         baseUrl: ' https://new.example.com ',
-        projectKey: 'proj-two',
-        organization: ' org ',
         branch: ' feature ',
         pullRequest: ' 99 ',
         verifyTls: false,
@@ -559,12 +566,10 @@ describe('ConnectionState', () => {
 
     expect(savedProfile).toEqual({
       id: 'existing',
-      name: 'proj-two (Server)',
+      name: 'https://new.example.com (Server)',
       connection: {
         type: 'server',
         baseUrl: 'https://new.example.com',
-        projectKey: 'proj-two',
-        organization: 'org',
         branch: 'feature',
         pullRequest: '99',
         verifyTls: false,
@@ -582,16 +587,13 @@ describe('ConnectionState', () => {
       name: 'Server profile',
       connection: {
         type: 'server',
-        baseUrl: 'https://sonar.example.com',
-        projectKey: 'proj'
+        baseUrl: 'https://sonar.example.com'
       }
     }, '');
 
     expect(savedProfile.connection).toEqual({
       type: 'server',
       baseUrl: 'https://sonar.example.com',
-      projectKey: 'proj',
-      organization: undefined,
       branch: undefined,
       pullRequest: undefined,
       verifyTls: true,
@@ -600,6 +602,12 @@ describe('ConnectionState', () => {
   });
 
   it('switches and deletes saved profiles cleanly', async () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-switch-'));
+    setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
+    fs.writeFileSync(
+      path.join(workspacePath, 'sonar-project.properties'),
+      'sonar.projectKey=current-project\nsonar.organization=current-org\n'
+    );
     setConfiguration({
       'connections.activeProfileId': 'first',
       'connections.profiles': [
@@ -608,8 +616,7 @@ describe('ConnectionState', () => {
           name: 'First',
           connection: {
             type: 'cloud',
-            baseUrl: 'https://sonarcloud.io',
-            projectKey: 'one'
+            baseUrl: 'https://sonarcloud.io'
           }
         },
         {
@@ -617,8 +624,7 @@ describe('ConnectionState', () => {
           name: 'Second',
           connection: {
             type: 'server',
-            baseUrl: 'https://sonar.example.com',
-            projectKey: 'two'
+            baseUrl: 'https://sonar.example.com'
           }
         }
       ]
@@ -630,14 +636,16 @@ describe('ConnectionState', () => {
     const state = new ConnectionState({ secrets, extensionPath: '/extension' } as never);
 
     await state.selectProfile('second');
-    expect(state.getActiveProfile().id).toBe('second');
-    expect(state.getConnection().projectKey).toBe('two');
+    expect(state.getActiveProfile()?.id).toBe('second');
+    expect(state.getConnection().projectKey).toBe('current-project');
     await expect(state.getToken()).resolves.toBe('two-token');
 
     await state.deleteProfile('second');
-    expect(state.getActiveProfile().id).toBe('first');
-    expect(state.getConnection().projectKey).toBe('one');
+    expect(state.getActiveProfile()?.id).toBe('first');
+    expect(state.getConnection().projectKey).toBe('current-project');
     await expect(state.getToken()).resolves.toBe('one-token');
+
+    fs.rmSync(workspacePath, { recursive: true, force: true });
   });
 
   it('ignores unknown profile ids when selecting or deleting', async () => {
@@ -649,8 +657,7 @@ describe('ConnectionState', () => {
           name: 'First',
           connection: {
             type: 'cloud',
-            baseUrl: 'https://sonarcloud.io',
-            projectKey: 'one'
+            baseUrl: 'https://sonarcloud.io'
           }
         }
       ]
@@ -662,9 +669,44 @@ describe('ConnectionState', () => {
     await state.selectProfile('missing');
     await state.deleteProfile('missing');
 
-    expect(state.getActiveProfile().id).toBe('first');
+    expect(state.getActiveProfile()?.id).toBe('first');
     expect(getUpdateCalls()).toEqual([]);
     expect(onDidChange).not.toHaveBeenCalled();
+  });
+
+  it('resets saved connections and the active project selection', async () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-reset-'));
+    fs.writeFileSync(path.join(workspacePath, 'sonar-project.properties'), 'sonar.projectKey=root-key\n');
+    setWorkspaceFolders([{ uri: { fsPath: workspacePath } }]);
+    setConfiguration({
+      'connections.activeProfileId': 'first',
+      'connections.profiles': [
+        {
+          id: 'first',
+          name: 'First',
+          connection: {
+            type: 'cloud',
+            baseUrl: 'https://sonarcloud.io'
+          }
+        }
+      ],
+      'projects.activeProjectPath': workspacePath
+    });
+    const secrets = createSecretStorage({
+      'sonarPromptFixer.token.first': 'one-token'
+    });
+    const state = new ConnectionState({ secrets, extensionPath: '/extension' } as never);
+
+    await state.resetConnectionsAndProjects();
+
+    expect(state.getProfiles()).toHaveLength(0);
+    expect(state.getActiveProfileId()).toBe('');
+    expect(state.getActiveProfile()).toBeUndefined();
+    expect(state.getActiveProject()?.projectKey).toBe('root-key');
+    await expect(state.getToken('first')).resolves.toBeUndefined();
+    expect(getUpdateCalls().map((call) => call.key)).toContain('projects.activeProjectPath');
+
+    fs.rmSync(workspacePath, { recursive: true, force: true });
   });
 
   it('falls back to SONAR_TOKEN from .env when secret storage is empty', async () => {

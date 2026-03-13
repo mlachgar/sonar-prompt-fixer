@@ -6,6 +6,7 @@ import { mapConnectionError } from '../src/util/diagnostics';
 import { ConfigurationError, HttpError, isErrorWithCode } from '../src/util/errors';
 import { deleteToken, loadToken, storeToken } from '../src/util/secrets';
 import { loadSonarProjectProperties, parseSonarProjectProperties } from '../src/util/sonarProjectProperties';
+import { discoverSonarWorkspaceProjects } from '../src/util/sonarWorkspaceProjects';
 import { createSecretStorage, setWorkspaceFolders } from './vscodeMock';
 
 afterEach(() => {
@@ -139,5 +140,43 @@ describe('sonar-project.properties helpers', () => {
     setWorkspaceFolders(undefined);
 
     expect(loadSonarProjectProperties()).toEqual({});
+  });
+
+  it('discovers workspace root and child Sonar projects in stable order', () => {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'spf-monorepo-'));
+    const appDir = path.join(workspaceRoot, 'app');
+    const pkgDir = path.join(workspaceRoot, 'package-a');
+    fs.mkdirSync(appDir);
+    fs.mkdirSync(pkgDir);
+    fs.writeFileSync(path.join(workspaceRoot, 'sonar-project.properties'), 'sonar.projectKey=root-key\nsonar.organization=root-org\n');
+    fs.writeFileSync(path.join(appDir, 'sonar-project.properties'), 'sonar.projectKey=app-key\n');
+    fs.writeFileSync(path.join(pkgDir, 'sonar-project.properties'), 'sonar.projectKey=pkg-key\n');
+    setWorkspaceFolders([{ uri: { fsPath: workspaceRoot } }]);
+
+    expect(discoverSonarWorkspaceProjects()).toEqual([
+      {
+        directory: workspaceRoot,
+        label: path.basename(workspaceRoot),
+        projectKey: 'root-key',
+        organization: 'root-org',
+        propertiesPath: path.join(workspaceRoot, 'sonar-project.properties')
+      },
+      {
+        directory: appDir,
+        label: 'app',
+        projectKey: 'app-key',
+        organization: undefined,
+        propertiesPath: path.join(appDir, 'sonar-project.properties')
+      },
+      {
+        directory: pkgDir,
+        label: 'package-a',
+        projectKey: 'pkg-key',
+        organization: undefined,
+        propertiesPath: path.join(pkgDir, 'sonar-project.properties')
+      }
+    ]);
+
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 });

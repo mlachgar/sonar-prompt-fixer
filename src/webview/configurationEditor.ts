@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
 import { createSonarBackend } from '../sonar/SonarBackendFactory';
-import { SonarConnection, SonarConnectionProfile } from '../sonar/types';
+import { SonarConnectionProfile, SonarProfileConnection } from '../sonar/types';
 import { ConnectionState } from '../state/ConnectionState';
 import { ConfigurationError } from '../util/errors';
 import { renderConfigurationEditorHtml } from './configurationEditor.html';
 
-type EditableProfile = Partial<SonarConnectionProfile> & { connection: SonarConnection };
+type EditableProfile = Partial<SonarConnectionProfile> & { connection: SonarProfileConnection };
 
 type ConfigurationMessage =
   | { type: 'saveProfile'; profile: EditableProfile; token: string }
   | { type: 'selectProfile'; profileId: string }
   | { type: 'deleteProfile'; profileId: string }
-  | { type: 'testConnection'; connection: SonarConnection; token: string };
+  | { type: 'testConnection'; connection: SonarProfileConnection; token: string };
 
 export class ConfigurationEditor {
   private panel?: vscode.WebviewPanel;
@@ -92,10 +92,12 @@ export class ConfigurationEditor {
         id: profile.id,
         name: profile.name,
         type: profile.connection.type,
-        baseUrl: profile.connection.baseUrl,
-        projectKey: profile.connection.projectKey
+        baseUrl: profile.connection.baseUrl
       })),
       activeProfile,
+      defaultConnection: this.connectionState.getDefaultProfileConnection(),
+      activeProject: this.connectionState.getActiveProject(),
+      projectConfiguration: this.connectionState.getProjectConfiguration(),
       hasToken: this.token.length > 0,
       token: this.token,
       statusMessage: this.statusMessage,
@@ -123,14 +125,17 @@ export class ConfigurationEditor {
   private async selectProfile(profileId: string): Promise<void> {
     await this.connectionState.selectProfile(profileId);
     await this.refreshToken();
-    this.statusMessage = `Active profile switched to "${this.connectionState.getActiveProfile().name}".`;
+    const activeProfile = this.connectionState.getActiveProfile();
+    this.statusMessage = activeProfile
+      ? `Active profile switched to "${activeProfile.name}".`
+      : 'No saved profile is selected.';
     this.statusKind = 'info';
     this.update();
   }
 
   private async deleteProfile(profileId: string): Promise<void> {
     const profile = this.connectionState.getProfiles().find((item) => item.id === profileId);
-    if (!profile || profile.id === '__default__') {
+    if (!profile) {
       return;
     }
 
@@ -141,17 +146,15 @@ export class ConfigurationEditor {
     this.update();
   }
 
-  private async testConnection(connection: SonarConnection, token: string): Promise<void> {
+  private async testConnection(connection: SonarProfileConnection, token: string): Promise<void> {
     try {
       const trimmedToken = token.trim();
-      const backend = createSonarBackend({
+      const backend = createSonarBackend(this.connectionState.resolveConnection({
         ...connection,
         baseUrl: connection.baseUrl.trim(),
-        projectKey: connection.projectKey.trim(),
-        organization: connection.organization?.trim() || undefined,
         branch: connection.branch?.trim() || undefined,
         pullRequest: connection.pullRequest?.trim() || undefined
-      }, trimmedToken || undefined);
+      }), trimmedToken || undefined);
       const result = await backend.testConnection();
       this.statusMessage = result.details ? `${result.message} ${result.details}` : result.message;
       this.statusKind = result.ok ? 'success' : 'error';

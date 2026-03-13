@@ -54,7 +54,8 @@ let workspaceFolders: Array<{ uri: { fsPath: string } }> | undefined = [
 ];
 
 export const ConfigurationTarget = {
-  Global: 'global'
+  Global: 'global',
+  Workspace: 'workspace'
 } as const;
 
 export const TreeItemCollapsibleState = {

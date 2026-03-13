@@ -30,7 +30,7 @@ export function renderClaudePrompt(input: CanonicalPromptInput): string {
 }
 
 function getRepositoryContext(input: CanonicalPromptInput): string {
-  return input.repositoryName ? ` for workspace "${input.repositoryName}"` : '';
+  return input.repositoryName ? ` for project "${input.repositoryName}"` : '';
 }
 
 function getClaudeIntro(input: CanonicalPromptInput): string {

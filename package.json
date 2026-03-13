@@ -1,7 +1,7 @@
 {
   "name": "sonar-prompt-fixer",
   "displayName": "Sonar Prompt Fixer",
-  "description": "Turn SonarQube findings into remediation prompts for Codex, Claude Code, and Qwen directly from VS Code.",
+  "description": "Connect reusable SonarQube profiles, switch workspace projects, and turn Sonar findings into remediation prompts in VS Code.",
   "version": "0.0.1",
   "publisher": "mohamedlachgar",
   "license": "MIT",
@@ -25,6 +25,9 @@
     "sonarqube",
     "sonarcloud",
     "sonar",
+    "monorepo",
+    "project-selector",
+    "developer-tools",
     "prompt",
     "codex",
     "claude",
@@ -66,6 +69,11 @@
         "command": "sonarPromptFixer.openIssuesWorkspace",
         "title": "Sonar Prompt Fixer: Open Sonar Workspace",
         "icon": "$(layout)"
+      },
+      {
+        "command": "sonarPromptFixer.resetState",
+        "title": "Sonar Prompt Fixer: Reset Connections And Projects",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {
@@ -119,6 +127,12 @@
           "default": "",
           "description": "Active saved Sonar connection profile id."
         },
+        "sonarPromptFixer.projects.activeProjectPath": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Active workspace Sonar project directory selected from discovered sonar-project.properties files."
+        },
         "sonarPromptFixer.connections.profiles": {
           "type": "array",
           "default": [],
@@ -141,8 +155,7 @@
                 "type": "object",
                 "required": [
                   "type",
-                  "baseUrl",
-                  "projectKey"
+                  "baseUrl"
                 ],
                 "properties": {
                   "type": {
@@ -153,12 +166,6 @@
                     ]
                   },
                   "baseUrl": {
-                    "type": "string"
-                  },
-                  "projectKey": {
-                    "type": "string"
-                  },
-                  "organization": {
                     "type": "string"
                   },
                   "branch": {

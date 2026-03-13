@@ -146,7 +146,7 @@ function formatPercent(value?: number): string {
 }
 
 function getRepositoryContext(input: CanonicalPromptInput): string {
-  return input.repositoryName ? ` for workspace "${input.repositoryName}"` : '';
+  return input.repositoryName ? ` for project "${input.repositoryName}"` : '';
 }
 
 function formatNumber(value?: number): string {

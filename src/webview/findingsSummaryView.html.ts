@@ -4,13 +4,21 @@ type SummaryMode = 'issues' | 'coverage' | 'duplication' | 'hotspots';
 
 type FindingsSummaryModel = {
   loading: boolean;
+  hasSummary: boolean;
   activeProfileId: string;
   activeProfileName: string;
   activeProfileTarget: string;
+  activeProjectPath: string;
+  activeProjectLabel: string;
   profiles: Array<{
     id: string;
     name: string;
     target: string;
+  }>;
+  projects: Array<{
+    path: string;
+    label: string;
+    projectKey: string;
   }>;
   counts: Array<{
     mode: SummaryMode;
@@ -62,14 +70,19 @@ export function renderFindingsSummaryHtml(webview: import('vscode').Webview, mod
         background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 95%, white 3%), var(--panel));
       }
       .toolbar {
-        display: flex;
+        display: grid;
+        gap: 8px;
+        align-items: end;
+      }
+      .toolbarRow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         gap: 8px;
         align-items: end;
       }
       .toolbarLabel {
         display: grid;
         gap: 6px;
-        flex: 1;
         min-width: 0;
         font-size: 12px;
         color: var(--muted);
@@ -161,10 +174,15 @@ export function renderFindingsSummaryHtml(webview: import('vscode').Webview, mod
     <main class="page">
       <section class="hero">
         <div class="toolbar">
-          <label class="toolbarLabel">Profile
-            <select id="profileSelect" aria-label="Select profile"></select>
+          <div class="toolbarRow">
+            <label class="toolbarLabel">Profile
+              <select id="profileSelect" aria-label="Select profile"></select>
+            </label>
+            <button class="toolbarButton" id="refreshButton" type="button" aria-label="Refresh findings" title="Refresh findings">&#x21bb;</button>
+          </div>
+          <label class="toolbarLabel">Project
+            <select id="projectSelect" aria-label="Select project"></select>
           </label>
-          <button class="toolbarButton" id="refreshButton" type="button" aria-label="Refresh findings" title="Refresh findings">&#x21bb;</button>
         </div>
       </section>
       <section class="status" id="status"></section>
@@ -174,10 +192,12 @@ export function renderFindingsSummaryHtml(webview: import('vscode').Webview, mod
       const vscode = acquireVsCodeApi();
       const model = ${stateJson};
       const profileSelect = document.getElementById('profileSelect');
+      const projectSelect = document.getElementById('projectSelect');
       const refreshButton = document.getElementById('refreshButton');
       const status = document.getElementById('status');
       const cards = document.getElementById('cards');
       let syncingProfileSelect = false;
+      let syncingProjectSelect = false;
 
       function render(data) {
         syncingProfileSelect = true;
@@ -191,14 +211,31 @@ export function renderFindingsSummaryHtml(webview: import('vscode').Webview, mod
         profileSelect.value = data.activeProfileId;
         syncingProfileSelect = false;
 
-        profileSelect.disabled = data.loading;
+        syncingProjectSelect = true;
+        projectSelect.innerHTML = '';
+        for (const project of data.projects) {
+          const option = document.createElement('option');
+          option.value = project.path;
+          option.textContent = project.label + ' (' + project.projectKey + ')';
+          projectSelect.appendChild(option);
+        }
+        projectSelect.value = data.activeProjectPath;
+        syncingProjectSelect = false;
+
+        profileSelect.disabled = data.loading || data.profiles.length === 0;
+        projectSelect.disabled = data.loading || data.projects.length === 0;
         refreshButton.disabled = data.loading;
         status.innerHTML = data.loading
           ? '<span class="spinner"></span>Fetching Sonar findings...'
-          : '';
-        status.hidden = !data.loading;
+          : data.profiles.length === 0
+            ? 'No saved Sonar connection yet.'
+          : data.projects.length === 0
+            ? 'No Sonar project was found. Add a sonar-project.properties at the workspace root or one level below it.'
+            : '';
+        status.hidden = false;
 
         cards.innerHTML = '';
+        cards.hidden = !data.hasSummary;
         for (const item of data.counts) {
           const button = document.createElement('button');
           button.className = 'card';
@@ -225,6 +262,13 @@ export function renderFindingsSummaryHtml(webview: import('vscode').Webview, mod
           return;
         }
         vscode.postMessage({ type: 'selectProfile', profileId: profileSelect.value });
+      });
+
+      projectSelect.addEventListener('change', () => {
+        if (syncingProjectSelect) {
+          return;
+        }
+        vscode.postMessage({ type: 'selectProject', projectPath: projectSelect.value });
       });
 
       refreshButton.addEventListener('click', () => {
